@@ -1,0 +1,1005 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
+<title>Larder</title>
+
+<link rel="manifest" href="manifest.json" />
+<link rel="apple-touch-icon" href="icons/icon-180.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<meta name="apple-mobile-web-app-title" content="Larder" />
+<meta name="theme-color" content="#4B6350" />
+
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; background: #F6F2E9; }
+  #root { min-height: 100%; }
+</style>
+
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect } = React;
+
+// ====== 1) PASTE YOUR SUPABASE PROJECT DETAILS HERE ======
+// Settings -> API in your Supabase project dashboard.
+const SUPABASE_URL = "https://mypejohitoivemqgefke.supabase.co/rest/v1/";
+const SUPABASE_ANON_KEY = "sb_publishable_HqDA-EsI75lVtAcyhB4iKw_rIQAYKmy";
+// ===========================================================
+
+const isConfigured = SUPABASE_URL.startsWith("http") && SUPABASE_ANON_KEY.length > 20;
+const supabaseClient = isConfigured ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
+
+function makeIcon(glyph) {
+  return function IconComp({ size = 16 }) {
+    return (
+      <span aria-hidden="true" style={{ fontSize: size, lineHeight: 1, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
+        {glyph}
+      </span>
+    );
+  };
+}
+const CalendarDays = makeIcon("📅");
+const ChevronLeft = makeIcon("‹");
+const ChevronRight = makeIcon("›");
+const Plus = makeIcon("+");
+const X = makeIcon("×");
+const BookOpen = makeIcon("📖");
+const ShoppingBasket = makeIcon("🧺");
+const Check = makeIcon("✓");
+const Trash2 = makeIcon("🗑");
+const Pencil = makeIcon("✎");
+const Search = makeIcon("🔍");
+const Sparkles = makeIcon("✨");
+const Utensils = makeIcon("🍽");
+const StickyNote = makeIcon("📝");
+
+const MEAL_TYPES = ["breakfast", "lunch", "dinner", "snack"];
+const MEAL_COLORS = {
+  breakfast: "#C08A1E",
+  lunch: "#4B6350",
+  dinner: "#8B3A42",
+  snack: "#5B7C99",
+};
+const TAB_TAGLINES = {
+  today: "Plan the week, log the day",
+  menu: "Your recipe collection",
+  shopping: "Pack the cart",
+};
+
+function uid() {
+  return `id_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function todayStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function addDays(dateStr, delta) {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const dt = new Date(y, m - 1, d);
+  dt.setDate(dt.getDate() + delta);
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+}
+
+function formatDateDisplay(dateStr) {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const dt = new Date(y, m - 1, d);
+  return dt.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+}
+
+function getWeekDates(dateStr) {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const dt = new Date(y, m - 1, d);
+  const dow = dt.getDay();
+  const diffToMonday = dow === 0 ? -6 : 1 - dow;
+  const monday = new Date(dt);
+  monday.setDate(dt.getDate() + diffToMonday);
+  const dates = [];
+  for (let i = 0; i < 7; i++) {
+    const d2 = new Date(monday);
+    d2.setDate(monday.getDate() + i);
+    dates.push(`${d2.getFullYear()}-${String(d2.getMonth() + 1).padStart(2, "0")}-${String(d2.getDate()).padStart(2, "0")}`);
+  }
+  return dates;
+}
+
+function formatWeekRange(dates) {
+  const parse = (s) => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); };
+  const opts = { month: "short", day: "numeric" };
+  return `${parse(dates[0]).toLocaleDateString("en-US", opts)} – ${parse(dates[6]).toLocaleDateString("en-US", opts)}`;
+}
+
+function formatDayShort(dateStr) {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const dt = new Date(y, m - 1, d);
+  return { weekday: dt.toLocaleDateString("en-US", { weekday: "short" }), day: dt.getDate(), isToday: dateStr === todayStr() };
+}
+
+function parseQtyStr(raw) {
+  if (!raw) return null;
+  const s = raw.trim();
+  if (!s) return null;
+  const match = s.match(/^(\d+\s+\d+\/\d+|\d+\/\d+|\d+(?:\.\d+)?)\s*(.*)$/);
+  if (!match) return null;
+  const numToken = match[1];
+  const unit = (match[2] || "").trim().toLowerCase();
+  let num;
+  if (numToken.includes("/")) {
+    const spaceParts = numToken.split(" ");
+    if (spaceParts.length === 2) {
+      const whole = parseFloat(spaceParts[0]);
+      const [n, d] = spaceParts[1].split("/").map(Number);
+      num = whole + (d ? n / d : 0);
+    } else {
+      const [n, d] = numToken.split("/").map(Number);
+      num = d ? n / d : NaN;
+    }
+  } else {
+    num = parseFloat(numToken);
+  }
+  if (isNaN(num)) return null;
+  return { num, unit };
+}
+
+function formatNum(n) {
+  const rounded = Math.round(n * 100) / 100;
+  return String(rounded);
+}
+
+function aggregateIngredients(list) {
+  const groups = new Map();
+  list.forEach(({ name, qty }) => {
+    if (!name || !name.trim()) return;
+    const key = name.trim().toLowerCase();
+    if (!groups.has(key)) groups.set(key, { displayName: name.trim(), qtys: [] });
+    groups.get(key).qtys.push((qty || "").trim());
+  });
+  return Array.from(groups.values()).map(({ displayName, qtys }) => {
+    const nonEmpty = qtys.filter(Boolean);
+    if (nonEmpty.length === 0) return { name: displayName, qty: "" };
+    const parsed = nonEmpty.map(parseQtyStr);
+    const allParsed = parsed.every((p) => p !== null);
+    const units = parsed.map((p) => (p ? p.unit : ""));
+    const sameUnit = allParsed && new Set(units).size <= 1;
+    if (sameUnit) {
+      const sum = parsed.reduce((acc, p) => acc + p.num, 0);
+      const unit = units[0] || "";
+      return { name: displayName, qty: `${formatNum(sum)}${unit ? " " + unit : ""}` };
+    }
+    return { name: displayName, qty: nonEmpty.join(" + ") };
+  });
+}
+
+function toStepRows(steps) {
+  const arr = Array.isArray(steps)
+    ? steps
+    : typeof steps === "string" && steps.trim()
+    ? steps.split("\n").map((s) => s.trim()).filter(Boolean)
+    : [];
+  return arr.length ? arr.map((text) => ({ id: uid(), text })) : [{ id: uid(), text: "" }];
+}
+function normalizeStepsForDisplay(steps) {
+  if (Array.isArray(steps)) return steps.filter(Boolean);
+  if (typeof steps === "string" && steps.trim()) return steps.split("\n").map((s) => s.trim()).filter(Boolean);
+  return [];
+}
+function renderStepsList(steps) {
+  const list = normalizeStepsForDisplay(steps);
+  if (list.length === 0) return null;
+  return (
+    <ol className="steps-list">
+      {list.map((s, i) => <li key={i}>{s}</li>)}
+    </ol>
+  );
+}
+
+async function loadKey(key, fallback) {
+  if (!supabaseClient) return fallback;
+  try {
+    const { data, error } = await supabaseClient.from("larder_data").select("value").eq("id", key).maybeSingle();
+    if (error || !data) return fallback;
+    return data.value;
+  } catch (e) {
+    console.error("Load failed for", key, e);
+    return fallback;
+  }
+}
+
+async function saveKey(key, value) {
+  if (!supabaseClient) return;
+  try {
+    await supabaseClient.from("larder_data").upsert({ id: key, value, updated_at: new Date().toISOString() });
+  } catch (e) {
+    console.error("Save failed for", key, e);
+  }
+}
+
+function IngredientEditor({ ingredients, onChange }) {
+  const update = (id, field, value) =>
+    onChange(ingredients.map((row) => (row.id === id ? { ...row, [field]: value } : row)));
+  const addRow = () => onChange([...ingredients, { id: uid(), name: "", qty: "" }]);
+  const removeRow = (id) => onChange(ingredients.filter((r) => r.id !== id));
+  return (
+    <div className="ingredient-editor">
+      {ingredients.map((row) => (
+        <div className="ingredient-row" key={row.id}>
+          <input
+            className="input ing-name"
+            placeholder="Ingredient"
+            value={row.name}
+            onChange={(e) => update(row.id, "name", e.target.value)}
+          />
+          <input
+            className="input ing-qty"
+            placeholder="Qty"
+            value={row.qty}
+            onChange={(e) => update(row.id, "qty", e.target.value)}
+          />
+          <button className="btn-icon" onClick={() => removeRow(row.id)} aria-label="Remove ingredient">
+            <X size={16} />
+          </button>
+        </div>
+      ))}
+      <button className="btn-secondary btn-small" onClick={addRow}>
+        <Plus size={14} /> Add ingredient
+      </button>
+    </div>
+  );
+}
+
+function StepsEditor({ steps, onChange }) {
+  const update = (id, value) => onChange(steps.map((s) => (s.id === id ? { ...s, text: value } : s)));
+  const addRow = () => onChange([...steps, { id: uid(), text: "" }]);
+  const removeRow = (id) => onChange(steps.filter((s) => s.id !== id));
+  return (
+    <div className="steps-editor">
+      {steps.map((s, idx) => (
+        <div className="step-row" key={s.id}>
+          <span className="step-bullet">{idx + 1}</span>
+          <textarea
+            className="textarea step-input"
+            rows={2}
+            placeholder={`Step ${idx + 1}`}
+            value={s.text}
+            onChange={(e) => update(s.id, e.target.value)}
+          />
+          <button className="btn-icon" onClick={() => removeRow(s.id)} aria-label="Remove step">
+            <X size={16} />
+          </button>
+        </div>
+      ))}
+      <button className="btn-secondary btn-small" onClick={addRow}>
+        <Plus size={14} /> Add step
+      </button>
+    </div>
+  );
+}
+
+function App() {
+  const [loaded, setLoaded] = useState(false);
+  const [activeTab, setActiveTab] = useState("today");
+  const [plannerMode, setPlannerMode] = useState("week");
+  const [selectedDate, setSelectedDate] = useState(todayStr());
+  const [dailyLogs, setDailyLogs] = useState({});
+  const [menuItems, setMenuItems] = useState([]);
+  const [shopping, setShopping] = useState({ items: [], selectedMenuIds: [] });
+
+  const [showMealForm, setShowMealForm] = useState(false);
+  const [mealDraft, setMealDraft] = useState(null);
+  const [showMenuForm, setShowMenuForm] = useState(false);
+  const [menuDraft, setMenuDraft] = useState(null);
+  const [menuSearch, setMenuSearch] = useState("");
+  const [manualName, setManualName] = useState("");
+  const [manualQty, setManualQty] = useState("");
+
+  useEffect(() => {
+    (async () => {
+      const dl = await loadKey("larder-daily-logs", {});
+      const mi = await loadKey("larder-menu-items", []);
+      const sl = await loadKey("larder-shopping", { items: [], selectedMenuIds: [] });
+      setDailyLogs(dl);
+      setMenuItems(mi);
+      setShopping(sl);
+      setLoaded(true);
+    })();
+  }, []);
+
+  useEffect(() => { if (loaded) saveKey("larder-daily-logs", dailyLogs); }, [dailyLogs, loaded]);
+  useEffect(() => { if (loaded) saveKey("larder-menu-items", menuItems); }, [menuItems, loaded]);
+  useEffect(() => { if (loaded) saveKey("larder-shopping", shopping); }, [shopping, loaded]);
+
+  function openNewMealForm(prefill, date) {
+    setMealDraft({
+      date: date || selectedDate,
+      mealType: (prefill && prefill.mealType) || "dinner",
+      name: (prefill && prefill.name) || "",
+      ingredients:
+        prefill && prefill.ingredients && prefill.ingredients.length
+          ? prefill.ingredients.map((i) => ({ id: uid(), name: i.name, qty: i.qty }))
+          : [{ id: uid(), name: "", qty: "" }],
+      steps: toStepRows(prefill && prefill.steps),
+      notes: (prefill && prefill.notes) || "",
+      saveToMenu: false,
+      fromMenu: !!(prefill && prefill.fromMenu),
+    });
+    setShowMealForm(true);
+  }
+  function openLogFromMenu(menuItem, date) {
+    openNewMealForm({ mealType: "lunch", name: menuItem.name, ingredients: menuItem.ingredients, steps: menuItem.steps, notes: menuItem.notes, fromMenu: true }, date);
+  }
+  function openEditMeal(entry, mt, date) {
+    setMealDraft({
+      id: entry.id,
+      date,
+      mealType: mt,
+      name: entry.name,
+      ingredients: entry.ingredients.map((i) => ({ id: uid(), name: i.name, qty: i.qty })),
+      steps: toStepRows(entry.steps),
+      notes: entry.notes || "",
+      saveToMenu: false,
+      fromMenu: true,
+    });
+    setShowMealForm(true);
+  }
+  function fillDraftFromMenu(menuItem) {
+    setMealDraft((prev) => ({
+      ...prev,
+      name: menuItem.name,
+      ingredients: menuItem.ingredients.map((i) => ({ id: uid(), name: i.name, qty: i.qty })),
+      steps: toStepRows(menuItem.steps),
+      notes: menuItem.notes || "",
+      fromMenu: true,
+    }));
+  }
+  function saveMeal() {
+    if (!mealDraft.name.trim()) return;
+    const cleanedIngredients = mealDraft.ingredients
+      .filter((i) => i.name.trim())
+      .map((i) => ({ name: i.name.trim(), qty: i.qty.trim() }));
+    const cleanedSteps = mealDraft.steps.map((s) => s.text.trim()).filter(Boolean);
+    const entry = { id: mealDraft.id || uid(), mealType: mealDraft.mealType, name: mealDraft.name.trim(), ingredients: cleanedIngredients, steps: cleanedSteps, notes: mealDraft.notes.trim() };
+    const targetDate = mealDraft.date;
+    setDailyLogs((prev) => {
+      const dayList = prev[targetDate] ? [...prev[targetDate]] : [];
+      const idx = dayList.findIndex((e) => e.id === entry.id);
+      if (idx >= 0) dayList[idx] = entry; else dayList.push(entry);
+      return { ...prev, [targetDate]: dayList };
+    });
+    if (mealDraft.saveToMenu) {
+      setMenuItems((prev) => [...prev, { id: uid(), name: entry.name, tags: [], ingredients: entry.ingredients, steps: entry.steps, notes: entry.notes }]);
+    }
+    setShowMealForm(false);
+    setMealDraft(null);
+  }
+  function deleteMeal(id, date) {
+    setDailyLogs((prev) => ({ ...prev, [date]: (prev[date] || []).filter((e) => e.id !== id) }));
+  }
+
+  function openNewMenuForm() {
+    setMenuDraft({ name: "", tags: "", ingredients: [{ id: uid(), name: "", qty: "" }], steps: [{ id: uid(), text: "" }], notes: "" });
+    setShowMenuForm(true);
+  }
+  function openEditMenuItem(mi) {
+    setMenuDraft({ id: mi.id, name: mi.name, tags: (mi.tags || []).join(", "), ingredients: mi.ingredients.map((i) => ({ id: uid(), name: i.name, qty: i.qty })), steps: toStepRows(mi.steps), notes: mi.notes || "" });
+    setShowMenuForm(true);
+  }
+  function saveMenuItem() {
+    if (!menuDraft.name.trim()) return;
+    const cleanedIngredients = menuDraft.ingredients.filter((i) => i.name.trim()).map((i) => ({ name: i.name.trim(), qty: i.qty.trim() }));
+    const cleanedSteps = menuDraft.steps.map((s) => s.text.trim()).filter(Boolean);
+    const tags = menuDraft.tags.split(",").map((t) => t.trim()).filter(Boolean);
+    const item = { id: menuDraft.id || uid(), name: menuDraft.name.trim(), tags, ingredients: cleanedIngredients, steps: cleanedSteps, notes: menuDraft.notes.trim() };
+    setMenuItems((prev) => {
+      const idx = prev.findIndex((m) => m.id === item.id);
+      if (idx >= 0) { const copy = [...prev]; copy[idx] = item; return copy; }
+      return [...prev, item];
+    });
+    setShowMenuForm(false);
+    setMenuDraft(null);
+  }
+  function deleteMenuItem(id) {
+    setMenuItems((prev) => prev.filter((m) => m.id !== id));
+    setShopping((prev) => ({ ...prev, selectedMenuIds: prev.selectedMenuIds.filter((x) => x !== id) }));
+  }
+
+  function toggleSelectMenu(id) {
+    setShopping((prev) => {
+      const has = prev.selectedMenuIds.includes(id);
+      return { ...prev, selectedMenuIds: has ? prev.selectedMenuIds.filter((x) => x !== id) : [...prev.selectedMenuIds, id] };
+    });
+  }
+  function generateFromSelected() {
+    const chosen = menuItems.filter((m) => shopping.selectedMenuIds.includes(m.id));
+    const aggregated = aggregateIngredients(chosen.flatMap((m) => m.ingredients));
+    setShopping((prev) => {
+      const items = [...prev.items];
+      aggregated.forEach((agg) => {
+        const existingIdx = items.findIndex((it) => it.name.toLowerCase() === agg.name.toLowerCase());
+        if (existingIdx >= 0) {
+          const merged = aggregateIngredients([{ name: items[existingIdx].name, qty: items[existingIdx].qty }, { name: agg.name, qty: agg.qty }]);
+          items[existingIdx] = { ...items[existingIdx], qty: merged[0].qty };
+        } else {
+          items.push({ id: uid(), name: agg.name, qty: agg.qty, checked: false, source: "menu" });
+        }
+      });
+      return { ...prev, items, selectedMenuIds: [] };
+    });
+  }
+  function addManualItem(name, qty) {
+    setShopping((prev) => ({ ...prev, items: [...prev.items, { id: uid(), name: name.trim(), qty: (qty || "").trim(), checked: false, source: "manual" }] }));
+  }
+  function handleManualAdd(e) {
+    e.preventDefault();
+    if (!manualName.trim()) return;
+    addManualItem(manualName, manualQty);
+    setManualName("");
+    setManualQty("");
+  }
+  function toggleChecked(id) {
+    setShopping((prev) => ({ ...prev, items: prev.items.map((it) => (it.id === id ? { ...it, checked: !it.checked } : it)) }));
+  }
+  function deleteItem(id) {
+    setShopping((prev) => ({ ...prev, items: prev.items.filter((it) => it.id !== id) }));
+  }
+  function clearChecked() {
+    setShopping((prev) => ({ ...prev, items: prev.items.filter((it) => !it.checked) }));
+  }
+  function clearAll() {
+    setShopping((prev) => ({ ...prev, items: [] }));
+  }
+
+  function renderWeekView() {
+    const weekDates = getWeekDates(selectedDate);
+    const isCurrentWeek = weekDates.includes(todayStr());
+    return (
+      <div className="view">
+        <div className="week-nav">
+          <button className="btn-icon" onClick={() => setSelectedDate(addDays(selectedDate, -7))}><ChevronLeft size={20} /></button>
+          <div className="week-nav-label">
+            <CalendarDays size={16} />
+            <span>{formatWeekRange(weekDates)}</span>
+            {!isCurrentWeek && <button className="today-pill" onClick={() => setSelectedDate(todayStr())}>This week</button>}
+          </div>
+          <button className="btn-icon" onClick={() => setSelectedDate(addDays(selectedDate, 7))}><ChevronRight size={20} /></button>
+        </div>
+
+        {weekDates.map((dateStr) => {
+          const entries = dailyLogs[dateStr] || [];
+          const hasDinner = entries.some((e) => e.mealType === "dinner");
+          const sortedEntries = MEAL_TYPES.flatMap((mt) => entries.filter((e) => e.mealType === mt));
+          const { weekday, day, isToday } = formatDayShort(dateStr);
+          return (
+            <div className={`week-day-card ${isToday ? "is-today" : ""}`} key={dateStr}>
+              <div className="week-day-head">
+                <span className="week-day-weekday">{weekday}</span>
+                <span className="week-day-num">{day}</span>
+              </div>
+              <div className="week-day-body">
+                {sortedEntries.length > 0 && (
+                  <div className="week-meal-rows">
+                    {sortedEntries.map((entry) => (
+                      <div className="week-meal-row" key={entry.id}>
+                        <span className="week-meal-dot" style={{ background: MEAL_COLORS[entry.mealType] }} />
+                        <span className="week-meal-name">{entry.name}</span>
+                        <div className="meal-card-actions">
+                          <button className="btn-icon" onClick={() => openEditMeal(entry, entry.mealType, dateStr)}><Pencil size={13} /></button>
+                          <button className="btn-icon" onClick={() => deleteMeal(entry.id, dateStr)}><Trash2 size={13} /></button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {!hasDinner && (
+                  <button className="week-dinner-slot empty" onClick={() => openNewMealForm({ mealType: "dinner" }, dateStr)}>
+                    <Plus size={14} /> Plan dinner
+                  </button>
+                )}
+                <button className="week-add-other" onClick={() => openNewMealForm({ mealType: "breakfast" }, dateStr)}>+ add another meal</button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
+  function renderDayView() {
+    const entries = dailyLogs[selectedDate] || [];
+    const isToday = selectedDate === todayStr();
+    return (
+      <div className="view">
+        <div className="date-nav">
+          <button className="btn-icon" onClick={() => setSelectedDate(addDays(selectedDate, -1))}><ChevronLeft size={20} /></button>
+          <div className="date-label">
+            <CalendarDays size={16} />
+            <span>{formatDateDisplay(selectedDate)}</span>
+            {!isToday && <button className="today-pill" onClick={() => setSelectedDate(todayStr())}>Today</button>}
+          </div>
+          <button className="btn-icon" onClick={() => setSelectedDate(addDays(selectedDate, 1))}><ChevronRight size={20} /></button>
+        </div>
+
+        {menuItems.length > 0 && (
+          <div className="quick-log-row">
+            <div className="quick-log-label">Quick log from Menu</div>
+            <div className="quick-log-scroll">
+              {menuItems.map((mi) => (
+                <button key={mi.id} className="quick-log-chip" onClick={() => openLogFromMenu(mi, selectedDate)}>{mi.name}</button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {entries.length === 0 ? (
+          <div className="empty-state">
+            <Utensils size={28} />
+            <p>Nothing logged for this day yet. Tap + to add a meal.</p>
+          </div>
+        ) : (
+          <div className="meal-list">
+            {MEAL_TYPES.map((mt) => {
+              const forType = entries.filter((e) => e.mealType === mt);
+              if (forType.length === 0) return null;
+              return (
+                <div key={mt} className="meal-group">
+                  <div className="meal-group-label" style={{ color: MEAL_COLORS[mt] }}>{mt}</div>
+                  {forType.map((entry) => (
+                    <div className="meal-card" key={entry.id}>
+                      <div className="meal-tab" style={{ background: MEAL_COLORS[mt] }} />
+                      <div className="meal-card-body">
+                        <div className="meal-card-head">
+                          <h4>{entry.name}</h4>
+                          <div className="meal-card-actions">
+                            <button className="btn-icon" onClick={() => openEditMeal(entry, mt, selectedDate)}><Pencil size={14} /></button>
+                            <button className="btn-icon" onClick={() => deleteMeal(entry.id, selectedDate)}><Trash2 size={14} /></button>
+                          </div>
+                        </div>
+                        {entry.ingredients.length > 0 && (
+                          <div className="ingredient-tags">
+                            {entry.ingredients.map((ing, i) => (
+                              <span className="mono-chip" key={i}>{ing.name}{ing.qty ? ` · ${ing.qty}` : ""}</span>
+                            ))}
+                          </div>
+                        )}
+                        {renderStepsList(entry.steps)}
+                        {entry.notes && (
+                          <div className="note-block"><StickyNote size={12} /><span>{entry.notes}</span></div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
+          </div>
+        )}
+        <button className="fab" onClick={() => openNewMealForm({ mealType: "breakfast" }, selectedDate)} aria-label="Log a meal"><Plus size={22} /></button>
+      </div>
+    );
+  }
+
+  function renderPlanner() {
+    return (
+      <>
+        <div className="view" style={{ paddingBottom: 0 }}>
+          <div className="view-toggle">
+            <button className={plannerMode === "week" ? "active" : ""} onClick={() => setPlannerMode("week")}>Week</button>
+            <button className={plannerMode === "day" ? "active" : ""} onClick={() => setPlannerMode("day")}>Day</button>
+          </div>
+        </div>
+        {plannerMode === "week" ? renderWeekView() : renderDayView()}
+      </>
+    );
+  }
+
+  function renderMenu() {
+    const filtered = menuItems.filter(
+      (m) => m.name.toLowerCase().includes(menuSearch.toLowerCase()) || (m.tags || []).some((t) => t.toLowerCase().includes(menuSearch.toLowerCase()))
+    );
+    return (
+      <div className="view">
+        <div className="search-row">
+          <Search size={16} />
+          <input className="input search-input" placeholder="Search your recipes" value={menuSearch} onChange={(e) => setMenuSearch(e.target.value)} />
+        </div>
+        {menuItems.length === 0 ? (
+          <div className="empty-state">
+            <BookOpen size={28} />
+            <p>Your recipe menu is empty. Save meals here as you log them, or add one directly.</p>
+          </div>
+        ) : (
+          <div className="menu-grid">
+            {filtered.map((mi) => (
+              <div className="menu-card" key={mi.id}>
+                <div className="menu-card-head">
+                  <h4>{mi.name}</h4>
+                  <div className="meal-card-actions">
+                    <button className="btn-icon" onClick={() => openEditMenuItem(mi)}><Pencil size={14} /></button>
+                    <button className="btn-icon" onClick={() => deleteMenuItem(mi.id)}><Trash2 size={14} /></button>
+                  </div>
+                </div>
+                {mi.tags && mi.tags.length > 0 && (
+                  <div className="tag-row">{mi.tags.map((t, i) => <span className="chip" key={i}>{t}</span>)}</div>
+                )}
+                {mi.ingredients.length > 0 && (
+                  <div className="ingredient-tags">
+                    {mi.ingredients.map((ing, i) => (
+                      <span className="mono-chip" key={i}>{ing.name}{ing.qty ? ` · ${ing.qty}` : ""}</span>
+                    ))}
+                  </div>
+                )}
+                {renderStepsList(mi.steps)}
+                {mi.notes && (
+                  <div className="note-block"><StickyNote size={12} /><span>{mi.notes}</span></div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+        <button className="fab" onClick={openNewMenuForm} aria-label="Add recipe"><Plus size={22} /></button>
+      </div>
+    );
+  }
+
+  function renderShopping() {
+    return (
+      <div className="view">
+        <div className="shopping-section">
+          <div className="section-title">Build from Menu</div>
+          {menuItems.length === 0 ? (
+            <p className="hint-text">Add recipes to your Menu first, then pick which ones you're cooking this trip.</p>
+          ) : (
+            <>
+              <div className="menu-pick-list">
+                {menuItems.map((mi) => {
+                  const picked = shopping.selectedMenuIds.includes(mi.id);
+                  return (
+                    <button key={mi.id} className={`menu-pick-chip ${picked ? "active" : ""}`} onClick={() => toggleSelectMenu(mi.id)}>
+                      {picked && <Check size={14} />} {mi.name}
+                    </button>
+                  );
+                })}
+              </div>
+              <button className="btn-primary btn-small" disabled={shopping.selectedMenuIds.length === 0} onClick={generateFromSelected}>
+                <Sparkles size={14} /> Add ingredients to list
+              </button>
+            </>
+          )}
+        </div>
+
+        <div className="shopping-section">
+          <div className="section-title">Add item manually</div>
+          <form className="manual-add-row" onSubmit={handleManualAdd}>
+            <input className="input" placeholder="Item" value={manualName} onChange={(e) => setManualName(e.target.value)} />
+            <input className="input manual-qty" placeholder="Qty" value={manualQty} onChange={(e) => setManualQty(e.target.value)} />
+            <button type="submit" className="btn-icon btn-icon-primary" aria-label="Add item"><Plus size={18} /></button>
+          </form>
+        </div>
+
+        <div className="shopping-section">
+          <div className="section-title-row">
+            <div className="section-title">Shopping list ({shopping.items.length})</div>
+            {shopping.items.length > 0 && (
+              <div className="section-actions">
+                <button className="btn-text" onClick={clearChecked}>Clear checked</button>
+                <button className="btn-text danger" onClick={clearAll}>Clear all</button>
+              </div>
+            )}
+          </div>
+          {shopping.items.length === 0 ? (
+            <div className="empty-state">
+              <ShoppingBasket size={28} />
+              <p>Your list is empty. Generate it from your menu or add items above.</p>
+            </div>
+          ) : (
+            <div className="shopping-list">
+              {shopping.items.map((it) => (
+                <label className={`shopping-item ${it.checked ? "checked" : ""}`} key={it.id}>
+                  <input type="checkbox" checked={it.checked} onChange={() => toggleChecked(it.id)} />
+                  <span className="shopping-item-name">{it.name}</span>
+                  {it.qty && <span className="shopping-item-qty">{it.qty}</span>}
+                  <button
+                    className="btn-icon"
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); deleteItem(it.id); }}
+                    aria-label="Remove item"
+                  >
+                    <X size={14} />
+                  </button>
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="larder-app"
+      style={{
+        "--paper": "#F6F2E9",
+        "--surface": "#FFFFFF",
+        "--border": "#E3DCCB",
+        "--ink": "#2B2A28",
+        "--ink-soft": "#6B6558",
+        "--primary": "#4B6350",
+        "--danger": "#8B3A42",
+        "--gold": "#C08A1E",
+      }}
+    >
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+        .larder-app { font-family:'Inter',sans-serif; background:var(--paper); color:var(--ink); min-height:100vh; display:flex; flex-direction:column; }
+        .larder-app *{ box-sizing:border-box; }
+        .larder-app button{ font-family:inherit; }
+        .larder-header{ padding:calc(env(safe-area-inset-top,0px) + 16px) 20px 12px; border-bottom:1px solid var(--border); }
+        .larder-header h1{ font-family:'Fraunces',serif; font-weight:700; font-size:26px; margin:0; }
+        .tagline{ margin:2px 0 0; font-size:13px; color:var(--ink-soft); font-family:'JetBrains Mono',monospace; }
+        .config-warning{ margin:0; padding:10px 20px; background:#8B3A42; color:#fff; font-size:12.5px; }
+        .larder-main{ flex:1 1 auto; overflow-y:auto; -webkit-overflow-scrolling:touch; }
+        .view{ padding:16px; padding-bottom:110px; position:relative; min-height:100%; }
+        .larder-tabbar{ display:flex; border-top:1px solid var(--border); background:var(--surface); padding:8px 0 calc(env(safe-area-inset-bottom,0px) + 8px); }
+        .larder-tab{ flex:1; display:flex; flex-direction:column; align-items:center; gap:2px; background:none; border:none; color:var(--ink-soft); font-size:11px; cursor:pointer; padding:4px; }
+        .larder-tab.active{ color:var(--primary); }
+        .loading-state{ display:flex; align-items:center; justify-content:center; height:200px; color:var(--ink-soft); font-family:'JetBrains Mono',monospace; font-size:13px; }
+
+        .view-toggle{ display:flex; gap:6px; margin-bottom:16px; background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:3px; }
+        .view-toggle button{ flex:1; border:none; background:none; padding:7px 0; border-radius:8px; font-size:13px; font-weight:600; color:var(--ink-soft); cursor:pointer; }
+        .view-toggle button.active{ background:var(--primary); color:#fff; }
+
+        .week-nav{ display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
+        .week-nav-label{ display:flex; align-items:center; gap:8px; font-weight:600; font-size:13.5px; font-family:'JetBrains Mono',monospace; }
+        .week-day-card{ background:var(--surface); border:1px solid var(--border); border-radius:12px; margin-bottom:10px; display:flex; overflow:hidden; }
+        .week-day-card.is-today{ border-color:var(--primary); border-width:1.5px; }
+        .week-day-head{ width:52px; flex-shrink:0; display:flex; flex-direction:column; align-items:center; justify-content:center; background:var(--paper); border-right:1px solid var(--border); padding:10px 4px; gap:2px; }
+        .week-day-card.is-today .week-day-head{ background:var(--primary); }
+        .week-day-card.is-today .week-day-weekday, .week-day-card.is-today .week-day-num{ color:#fff; }
+        .week-day-weekday{ font-size:11px; text-transform:uppercase; letter-spacing:0.04em; color:var(--ink-soft); font-weight:600; }
+        .week-day-num{ font-family:'Fraunces',serif; font-size:19px; font-weight:600; }
+        .week-day-body{ flex:1; padding:10px 12px; min-width:0; }
+        .week-meal-rows{ display:flex; flex-direction:column; gap:7px; margin-bottom:8px; }
+        .week-meal-row{ display:flex; align-items:center; gap:8px; }
+        .week-meal-dot{ width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+        .week-meal-name{ font-family:'Fraunces',serif; font-size:15px; font-weight:600; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .week-dinner-slot{ display:flex; align-items:center; justify-content:space-between; gap:8px; width:100%; background:none; border:none; padding:0; text-align:left; }
+        .week-dinner-slot.empty{ border:1.5px dashed var(--border); border-radius:10px; padding:9px 12px; color:var(--ink-soft); font-size:13.5px; cursor:pointer; display:flex; align-items:center; gap:6px; justify-content:center; margin-bottom:8px; }
+        .week-add-other{ display:block; background:none; border:none; color:var(--primary); font-size:12px; font-weight:600; padding:0; cursor:pointer; }
+
+        .date-nav{ display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
+        .date-label{ display:flex; align-items:center; gap:8px; font-weight:600; font-size:15px; }
+        .today-pill{ background:var(--primary); color:#fff; border:none; border-radius:10px; padding:3px 10px; font-size:11px; cursor:pointer; flex-shrink:0; }
+
+        .quick-log-row{ margin-bottom:20px; }
+        .quick-log-label{ font-size:12px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:8px; font-weight:600; }
+        .quick-log-scroll{ display:flex; gap:8px; overflow-x:auto; padding-bottom:4px; }
+        .quick-log-chip{ flex:0 0 auto; background:var(--surface); border:1px solid var(--border); border-radius:20px; padding:8px 14px; font-size:13px; white-space:nowrap; cursor:pointer; color:var(--ink); }
+
+        .meal-group{ margin-bottom:20px; }
+        .meal-group-label{ font-size:12px; text-transform:uppercase; letter-spacing:0.08em; font-weight:700; margin-bottom:8px; }
+        .meal-card{ position:relative; display:flex; background:var(--surface); border:1px solid var(--border); border-radius:12px; margin-bottom:10px; overflow:hidden; }
+        .meal-tab{ width:6px; flex-shrink:0; }
+        .meal-card-body{ padding:12px 14px; flex:1; min-width:0; }
+        .meal-card-head{ display:flex; justify-content:space-between; align-items:flex-start; gap:8px; }
+        .meal-card-head h4{ font-family:'Fraunces',serif; font-size:17px; margin:0; font-weight:600; }
+        .meal-card-actions{ display:flex; gap:2px; flex-shrink:0; }
+        .ingredient-tags{ display:flex; flex-wrap:wrap; gap:6px; margin:8px 0; }
+        .mono-chip{ font-family:'JetBrains Mono',monospace; font-size:11.5px; background:var(--paper); border-radius:6px; padding:3px 7px; color:var(--ink-soft); border:1px solid var(--border); }
+        .steps-list{ margin:8px 0 0; padding-left:18px; font-size:13.5px; color:var(--ink-soft); line-height:1.6; }
+        .steps-list li{ margin-bottom:3px; }
+        .note-block{ display:flex; align-items:flex-start; gap:6px; margin-top:8px; padding:8px 10px; background:rgba(192,138,30,0.1); border-left:2.5px solid var(--gold); border-radius:0 8px 8px 0; font-size:12.5px; color:var(--ink-soft); font-style:italic; line-height:1.5; }
+        .note-block svg, .note-block span:first-child{ flex-shrink:0; }
+
+        .empty-state{ display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:48px 24px; color:var(--ink-soft); gap:10px; }
+        .empty-state p{ font-size:14px; max-width:240px; margin:0; }
+
+        .fab{ position:fixed; right:20px; bottom:88px; width:52px; height:52px; border-radius:50%; background:var(--primary); color:#fff; border:none; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 14px rgba(43,42,40,0.25); cursor:pointer; z-index:10; }
+
+        .search-row{ display:flex; align-items:center; gap:8px; background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:8px 12px; margin-bottom:16px; color:var(--ink-soft); }
+        .search-input{ border:none !important; background:none !important; padding:2px 0 !important; }
+        .search-input:focus{ outline:none !important; }
+        .menu-grid{ display:flex; flex-direction:column; gap:12px; }
+        .menu-card{ background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px; }
+        .menu-card-head{ display:flex; justify-content:space-between; align-items:flex-start; }
+        .menu-card-head h4{ font-family:'Fraunces',serif; font-size:17px; margin:0; font-weight:600; }
+        .tag-row{ display:flex; gap:6px; flex-wrap:wrap; margin-top:6px; }
+        .chip{ font-size:11px; background:rgba(192,138,30,0.15); color:var(--gold); border-radius:10px; padding:3px 9px; font-weight:600; }
+
+        .shopping-section{ margin-bottom:24px; }
+        .section-title{ font-family:'Fraunces',serif; font-size:16px; font-weight:600; margin-bottom:10px; }
+        .section-title-row{ display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
+        .section-actions{ display:flex; gap:4px; }
+        .hint-text{ font-size:13px; color:var(--ink-soft); }
+        .menu-pick-list{ display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px; }
+        .menu-pick-chip{ border:1.5px solid var(--border); background:var(--surface); border-radius:20px; padding:7px 12px; font-size:13px; display:inline-flex; align-items:center; gap:4px; cursor:pointer; color:var(--ink); }
+        .menu-pick-chip.active{ background:var(--primary); border-color:var(--primary); color:#fff; }
+        .manual-add-row{ display:flex; gap:8px; }
+        .manual-qty{ max-width:90px; font-family:'JetBrains Mono',monospace; }
+        .shopping-list{ display:flex; flex-direction:column; gap:6px; }
+        .shopping-item{ display:flex; align-items:center; gap:10px; background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:10px 12px; }
+        .shopping-item input[type=checkbox]{ width:18px; height:18px; accent-color:var(--primary); flex-shrink:0; }
+        .shopping-item-name{ flex:1; font-size:14.5px; }
+        .shopping-item-qty{ font-family:'JetBrains Mono',monospace; font-size:12.5px; color:var(--ink-soft); background:var(--paper); border-radius:6px; padding:2px 6px; }
+        .shopping-item.checked .shopping-item-name{ text-decoration:line-through; color:var(--ink-soft); }
+
+        .btn-primary{ background:var(--primary); color:#fff; border:none; padding:12px 20px; border-radius:12px; font-weight:600; font-size:15px; display:inline-flex; align-items:center; gap:6px; justify-content:center; width:100%; cursor:pointer; }
+        .btn-primary:disabled{ opacity:0.4; cursor:not-allowed; }
+        .btn-secondary{ background:transparent; border:1.5px dashed var(--border); color:var(--ink-soft); padding:8px 14px; border-radius:10px; font-size:13px; display:inline-flex; align-items:center; gap:6px; cursor:pointer; }
+        .btn-small{ width:auto; padding:8px 16px; font-size:13px; }
+        .btn-icon{ background:none; border:none; color:var(--ink-soft); cursor:pointer; padding:6px; display:inline-flex; border-radius:8px; }
+        .btn-icon:hover{ background:rgba(0,0,0,0.05); }
+        .btn-icon-primary{ background:var(--primary); color:#fff; border-radius:10px; }
+        .btn-text{ background:none; border:none; color:var(--primary); font-size:13px; font-weight:500; cursor:pointer; padding:4px 8px; }
+        .btn-text.danger{ color:var(--danger); }
+
+        .input{ width:100%; border:1.5px solid var(--border); background:var(--surface); border-radius:10px; padding:10px 12px; font-family:'Inter',sans-serif; font-size:15px; color:var(--ink); }
+        .input:focus{ outline:2px solid var(--primary); outline-offset:1px; border-color:var(--primary); }
+        .textarea{ width:100%; min-height:44px; border:1.5px solid var(--border); background:var(--surface); border-radius:10px; padding:10px 12px; font-family:'Inter',sans-serif; font-size:14px; color:var(--ink); resize:vertical; }
+        .textarea:focus{ outline:2px solid var(--primary); outline-offset:1px; }
+        .field-label{ font-size:12px; text-transform:uppercase; letter-spacing:0.06em; color:var(--ink-soft); font-weight:600; margin-top:4px; }
+        .checkbox-row{ display:flex; align-items:center; gap:8px; font-size:14px; color:var(--ink-soft); }
+
+        .ingredient-editor{ display:flex; flex-direction:column; gap:8px; }
+        .ingredient-row{ display:flex; gap:8px; align-items:center; }
+        .ing-name{ flex:2; }
+        .ing-qty{ flex:1; font-family:'JetBrains Mono',monospace; font-size:13px; }
+
+        .steps-editor{ display:flex; flex-direction:column; gap:8px; }
+        .step-row{ display:flex; gap:8px; align-items:flex-start; }
+        .step-bullet{ width:22px; height:22px; border-radius:50%; background:var(--paper); border:1px solid var(--border); display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; color:var(--ink-soft); flex-shrink:0; margin-top:6px; font-family:'JetBrains Mono',monospace; }
+        .step-input{ flex:1; }
+
+        .meal-type-picker{ display:flex; gap:8px; flex-wrap:wrap; }
+        .meal-type-chip{ border:1.5px solid var(--border); background:var(--surface); padding:8px 14px; border-radius:20px; font-size:13px; text-transform:capitalize; cursor:pointer; color:var(--ink-soft); }
+        .meal-type-chip.active{ background:var(--chip-color); border-color:var(--chip-color); color:#fff; }
+
+        .modal-overlay{ position:fixed; inset:0; background:rgba(43,42,40,0.45); display:flex; align-items:flex-end; z-index:50; }
+        .modal-sheet{ background:var(--surface); width:100%; max-height:88vh; overflow-y:auto; border-radius:20px 20px 0 0; padding:8px 20px calc(env(safe-area-inset-bottom,0px) + 24px); animation: slideUp 0.22s ease-out; }
+        @keyframes slideUp{ from{ transform:translateY(24px); opacity:0; } to{ transform:translateY(0); opacity:1; } }
+        .modal-handle{ width:36px; height:4px; background:var(--border); border-radius:2px; margin:8px auto 12px; }
+        .modal-header{ display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
+        .modal-header h3{ font-family:'Fraunces',serif; font-size:20px; margin:0; }
+        .modal-body{ display:flex; flex-direction:column; gap:12px; }
+        .modal-footer{ margin-top:16px; }
+      `}</style>
+
+      <header className="larder-header">
+        <h1>Larder</h1>
+        <p className="tagline">{TAB_TAGLINES[activeTab]}</p>
+      </header>
+
+      {!isConfigured && (
+        <p className="config-warning">
+          ⚠️ Not connected yet — open index.html and paste your SUPABASE_URL and SUPABASE_ANON_KEY near the top. Your entries won't be saved until this is set.
+        </p>
+      )}
+
+      <main className="larder-main">
+        {!loaded ? (
+          <div className="loading-state">Loading your kitchen…</div>
+        ) : activeTab === "today" ? renderPlanner() : activeTab === "menu" ? renderMenu() : renderShopping()}
+      </main>
+
+      <nav className="larder-tabbar">
+        <button className={`larder-tab ${activeTab === "today" ? "active" : ""}`} onClick={() => setActiveTab("today")}>
+          <CalendarDays size={20} /><span>Today</span>
+        </button>
+        <button className={`larder-tab ${activeTab === "menu" ? "active" : ""}`} onClick={() => setActiveTab("menu")}>
+          <BookOpen size={20} /><span>Menu</span>
+        </button>
+        <button className={`larder-tab ${activeTab === "shopping" ? "active" : ""}`} onClick={() => setActiveTab("shopping")}>
+          <ShoppingBasket size={20} /><span>Shopping</span>
+        </button>
+      </nav>
+
+      {showMealForm && mealDraft && (
+        <div className="modal-overlay" onClick={() => setShowMealForm(false)}>
+          <div className="modal-sheet" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-handle" />
+            <div className="modal-header">
+              <h3>{mealDraft.id ? "Edit meal" : "Log a meal"}</h3>
+              <button className="btn-icon" onClick={() => setShowMealForm(false)}><X size={20} /></button>
+            </div>
+            <div className="modal-body">
+              <div className="meal-type-picker">
+                {MEAL_TYPES.map((mt) => (
+                  <button
+                    key={mt}
+                    className={`meal-type-chip ${mealDraft.mealType === mt ? "active" : ""}`}
+                    style={{ "--chip-color": MEAL_COLORS[mt] }}
+                    onClick={() => setMealDraft({ ...mealDraft, mealType: mt })}
+                  >
+                    {mt}
+                  </button>
+                ))}
+              </div>
+              {!mealDraft.id && menuItems.length > 0 && (
+                <div>
+                  <label className="field-label">Fill from Menu</label>
+                  <div className="quick-log-scroll">
+                    {menuItems.map((mi) => (
+                      <button key={mi.id} type="button" className="quick-log-chip" onClick={() => fillDraftFromMenu(mi)}>{mi.name}</button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <input className="input" placeholder="What did you make?" value={mealDraft.name} onChange={(e) => setMealDraft({ ...mealDraft, name: e.target.value })} />
+              <label className="field-label">Ingredients</label>
+              <IngredientEditor ingredients={mealDraft.ingredients} onChange={(ings) => setMealDraft({ ...mealDraft, ingredients: ings })} />
+              <label className="field-label">How to cook it</label>
+              <StepsEditor steps={mealDraft.steps} onChange={(steps) => setMealDraft({ ...mealDraft, steps })} />
+              <label className="field-label">Notes</label>
+              <textarea
+                className="textarea"
+                placeholder="Optional — substitutions, tips, what worked last time..."
+                value={mealDraft.notes}
+                onChange={(e) => setMealDraft({ ...mealDraft, notes: e.target.value })}
+              />
+              {!mealDraft.fromMenu && (
+                <label className="checkbox-row">
+                  <input type="checkbox" checked={mealDraft.saveToMenu} onChange={(e) => setMealDraft({ ...mealDraft, saveToMenu: e.target.checked })} />
+                  Also save to Menu for reuse
+                </label>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button className="btn-primary" onClick={saveMeal} disabled={!mealDraft.name.trim()}>Save</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showMenuForm && menuDraft && (
+        <div className="modal-overlay" onClick={() => setShowMenuForm(false)}>
+          <div className="modal-sheet" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-handle" />
+            <div className="modal-header">
+              <h3>{menuDraft.id ? "Edit recipe" : "New recipe"}</h3>
+              <button className="btn-icon" onClick={() => setShowMenuForm(false)}><X size={20} /></button>
+            </div>
+            <div className="modal-body">
+              <input className="input" placeholder="Recipe name" value={menuDraft.name} onChange={(e) => setMenuDraft({ ...menuDraft, name: e.target.value })} />
+              <input className="input" placeholder="Tags, comma separated (e.g. quick, vegetarian)" value={menuDraft.tags} onChange={(e) => setMenuDraft({ ...menuDraft, tags: e.target.value })} />
+              <label className="field-label">Ingredients</label>
+              <IngredientEditor ingredients={menuDraft.ingredients} onChange={(ings) => setMenuDraft({ ...menuDraft, ingredients: ings })} />
+              <label className="field-label">How to cook it</label>
+              <StepsEditor steps={menuDraft.steps} onChange={(steps) => setMenuDraft({ ...menuDraft, steps })} />
+              <label className="field-label">Notes</label>
+              <textarea
+                className="textarea"
+                placeholder="Optional — substitutions, tips, what worked last time..."
+                value={menuDraft.notes}
+                onChange={(e) => setMenuDraft({ ...menuDraft, notes: e.target.value })}
+              />
+            </div>
+            <div className="modal-footer">
+              <button className="btn-primary" onClick={saveMenuItem} disabled={!menuDraft.name.trim()}>Save recipe</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(<App />);
+</script>
+
+<script>
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("service-worker.js").catch(() => {});
+    });
+  }
+</script>
+</body>
+</html>
