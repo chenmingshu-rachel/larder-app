@@ -197,7 +197,7 @@ function renderStepsList(steps) {
     return (React.createElement("ol", { style: { margin: "8px 0 0", paddingLeft: 18, fontSize: 13.5, color: C.inkSoft, lineHeight: 1.6 } }, list.map((s, i) => React.createElement("li", { key: i, style: { marginBottom: 3 } }, s))));
 }
 // ====== PASTE YOUR SUPABASE PROJECT DETAILS HERE ======
-const SUPABASE_URL = "https://mypejohitoivemqgefke.supabase.co/rest/v1/";
+const SUPABASE_URL = "https://mypejohitoivemqgefke.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_HqDA-EsI75lVtAcyhB4iKw_rIQAYKmy";
 // ========================================================
 const isConfigured = SUPABASE_URL.startsWith("http") && SUPABASE_ANON_KEY.length > 20;
