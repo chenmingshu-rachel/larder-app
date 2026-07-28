@@ -197,7 +197,7 @@ function renderStepsList(steps) {
     return (React.createElement("ol", { style: { margin: "8px 0 0", paddingLeft: 18, fontSize: 13.5, color: C.inkSoft, lineHeight: 1.6 } }, list.map((s, i) => React.createElement("li", { key: i, style: { marginBottom: 3 } }, s))));
 }
 // ====== PASTE YOUR SUPABASE PROJECT DETAILS HERE ======
-const SUPABASE_URL = "https://mypejohitoivemqgefke.supabase.co";
+const SUPABASE_URL = "https://mypejohitoivemqgefke.supabase.co/";
 const SUPABASE_ANON_KEY = "sb_publishable_HqDA-EsI75lVtAcyhB4iKw_rIQAYKmy";
 // ========================================================
 const isConfigured = SUPABASE_URL.startsWith("http") && SUPABASE_ANON_KEY.length > 20;
@@ -524,8 +524,8 @@ function App() {
     function renderWeekView() {
         const weekDates = getWeekDates(selectedDate);
         const isCurrentWeek = weekDates.includes(todayStr());
-        return (React.createElement("div", { style: { padding: 16, paddingBottom: 110 } },
-            React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 } },
+        return (React.createElement("div", { style: { padding: "16px 16px 16px" } },
+            React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 } },
                 React.createElement(Btn, { kind: "icon", onClick: () => setSelectedDate(addDays(selectedDate, -7)) },
                     React.createElement(ChevronLeft, { size: 20 })),
                 React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, fontWeight: 600, fontSize: 13.5, fontFamily: FONT_MONO } },
@@ -539,23 +539,24 @@ function App() {
                 const hasDinner = entries.some((e) => e.mealType === "dinner");
                 const sortedEntries = MEAL_TYPES.flatMap((mt) => entries.filter((e) => e.mealType === mt));
                 const { weekday, day, isToday } = formatDayShort(dateStr);
-                return (React.createElement("div", { key: dateStr, style: { background: C.surface, border: `${isToday ? 1.5 : 1}px solid ${isToday ? C.primary : C.border}`, borderRadius: 12, marginBottom: 10, display: "flex", overflow: "hidden" } },
-                    React.createElement("div", { style: { width: 52, flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: isToday ? C.primary : C.paper, borderRight: `1px solid ${C.border}`, padding: "10px 4px", gap: 2 } },
-                        React.createElement("span", { style: { fontSize: 11, textTransform: "uppercase", letterSpacing: "0.04em", color: isToday ? "#fff" : C.inkSoft, fontWeight: 600 } }, weekday),
-                        React.createElement("span", { style: { fontFamily: FONT_SERIF, fontSize: 19, fontWeight: 600, color: isToday ? "#fff" : C.ink } }, day)),
-                    React.createElement("div", { style: { flex: 1, padding: "10px 12px", minWidth: 0 } },
-                        sortedEntries.length > 0 && (React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 7, marginBottom: 8 } }, sortedEntries.map((entry) => (React.createElement("div", { key: entry.id, style: { display: "flex", alignItems: "center", gap: 8 } },
-                            React.createElement("span", { style: { width: 8, height: 8, borderRadius: "50%", flexShrink: 0, background: MEAL_COLORS[entry.mealType] } }),
-                            React.createElement("span", { style: { fontFamily: FONT_SERIF, fontSize: 15, fontWeight: 600, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, entry.name),
-                            React.createElement("div", { style: { display: "flex", gap: 2, flexShrink: 0 } },
-                                React.createElement(Btn, { kind: "icon", onClick: () => openEditMeal(entry, entry.mealType, dateStr) },
-                                    React.createElement(Pencil, { size: 13 })),
-                                React.createElement(Btn, { kind: "icon", onClick: () => deleteMeal(entry.id, dateStr) },
-                                    React.createElement(Trash2, { size: 13 })))))))),
-                        !hasDinner && (React.createElement("button", { onClick: () => openNewMealForm({ mealType: "dinner" }, dateStr), style: { border: `1.5px dashed ${C.border}`, borderRadius: 10, padding: "9px 12px", color: C.inkSoft, fontSize: 13.5, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, justifyContent: "center", marginBottom: 8, width: "100%", background: "none" } },
-                            React.createElement(Plus, { size: 14 }),
-                            " Plan dinner")),
-                        React.createElement("button", { onClick: () => openNewMealForm({ mealType: "breakfast" }, dateStr), style: { display: "block", background: "none", border: "none", color: C.primary, fontSize: 12, fontWeight: 600, padding: 0, cursor: "pointer" } }, "+ add another meal"))));
+                return (React.createElement("div", { key: dateStr, style: { background: C.surface, border: `${isToday ? 1.5 : 1}px solid ${isToday ? C.primary : C.border}`, borderRadius: 12, marginBottom: 6, display: "flex", overflow: "hidden" } },
+                    React.createElement("div", { style: { width: 46, flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: isToday ? C.primary : C.paper, borderRight: `1px solid ${C.border}`, padding: "6px 4px", gap: 1 } },
+                        React.createElement("span", { style: { fontSize: 10, textTransform: "uppercase", letterSpacing: "0.04em", color: isToday ? "#fff" : C.inkSoft, fontWeight: 600 } }, weekday),
+                        React.createElement("span", { style: { fontFamily: FONT_SERIF, fontSize: 16, fontWeight: 600, color: isToday ? "#fff" : C.ink } }, day)),
+                    React.createElement("div", { style: { flex: 1, padding: "6px 8px 6px 10px", minWidth: 0, display: "flex", alignItems: "center", gap: 6 } },
+                        React.createElement("div", { style: { flex: 1, minWidth: 0 } },
+                            sortedEntries.length > 0 && (React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 4 } }, sortedEntries.map((entry) => (React.createElement("div", { key: entry.id, style: { display: "flex", alignItems: "center", gap: 6 } },
+                                React.createElement("span", { style: { width: 7, height: 7, borderRadius: "50%", flexShrink: 0, background: MEAL_COLORS[entry.mealType] } }),
+                                React.createElement("span", { style: { fontFamily: FONT_SERIF, fontSize: 14, fontWeight: 600, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, entry.name),
+                                React.createElement("div", { style: { display: "flex", gap: 0, flexShrink: 0 } },
+                                    React.createElement(Btn, { kind: "icon", style: { padding: 3 }, onClick: () => openEditMeal(entry, entry.mealType, dateStr) },
+                                        React.createElement(Pencil, { size: 12 })),
+                                    React.createElement(Btn, { kind: "icon", style: { padding: 3 }, onClick: () => deleteMeal(entry.id, dateStr) },
+                                        React.createElement(Trash2, { size: 12 })))))))),
+                            !hasDinner && (React.createElement("button", { onClick: () => openNewMealForm({ mealType: "dinner" }, dateStr), style: { border: `1.5px dashed ${C.border}`, borderRadius: 8, padding: "5px 10px", color: C.inkSoft, fontSize: 12.5, cursor: "pointer", display: "flex", alignItems: "center", gap: 5, justifyContent: "center", width: "100%", background: "none" } },
+                                React.createElement(Plus, { size: 12 }),
+                                " Plan dinner"))),
+                        React.createElement("button", { onClick: () => openNewMealForm({ mealType: "breakfast" }, dateStr), "aria-label": "Add another meal", style: { flexShrink: 0, width: 26, height: 26, borderRadius: "50%", background: "none", border: `1.5px dashed ${C.border}`, color: C.primary, fontSize: 14, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 } }, "+"))));
             })));
     }
     function renderDayView() {
@@ -601,8 +602,8 @@ function App() {
     }
     function renderPlanner() {
         return (React.createElement(React.Fragment, null,
-            React.createElement("div", { style: { padding: "16px 16px 0" } },
-                React.createElement("div", { style: { display: "flex", gap: 6, marginBottom: 16, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: 3 } },
+            React.createElement("div", { style: { padding: "12px 16px 0" } },
+                React.createElement("div", { style: { display: "flex", gap: 6, marginBottom: 10, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: 3 } },
                     React.createElement("button", { onClick: () => setPlannerMode("week"), style: { flex: 1, border: "none", background: plannerMode === "week" ? C.primary : "none", color: plannerMode === "week" ? "#fff" : C.inkSoft, padding: "7px 0", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" } }, "Week"),
                     React.createElement("button", { onClick: () => setPlannerMode("day"), style: { flex: 1, border: "none", background: plannerMode === "day" ? C.primary : "none", color: plannerMode === "day" ? "#fff" : C.inkSoft, padding: "7px 0", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" } }, "Day"))),
             plannerMode === "week" ? renderWeekView() : renderDayView()));
@@ -683,9 +684,9 @@ function App() {
     const modalOverlayStyle = { position: "fixed", inset: 0, background: "rgba(43,42,40,0.45)", display: "flex", alignItems: "flex-end", zIndex: 50 };
     const modalSheetStyle = { background: C.surface, width: "100%", maxHeight: "88vh", overflowY: "auto", borderRadius: "20px 20px 0 0", padding: "8px 20px 24px", boxSizing: "border-box" };
     return (React.createElement("div", { style: { fontFamily: FONT_SANS, background: C.paper, color: C.ink, minHeight: "100vh", display: "flex", flexDirection: "column" } },
-        React.createElement("header", { style: { padding: "16px 20px 12px", borderBottom: `1px solid ${C.border}` } },
-            React.createElement("h1", { style: { fontFamily: FONT_SERIF, fontWeight: 700, fontSize: 26, margin: 0 } }, "Larder"),
-            React.createElement("p", { style: { margin: "2px 0 0", fontSize: 13, color: C.inkSoft, fontFamily: FONT_MONO } }, TAB_TAGLINES[activeTab])),
+        React.createElement("header", { style: { padding: "12px 20px 10px", borderBottom: `1px solid ${C.border}` } },
+            React.createElement("h1", { style: { fontFamily: FONT_SERIF, fontWeight: 700, fontSize: 22, margin: 0 } }, "Larder"),
+            React.createElement("p", { style: { margin: "2px 0 0", fontSize: 12, color: C.inkSoft, fontFamily: FONT_MONO } }, TAB_TAGLINES[activeTab])),
         !isConfigured && (React.createElement("p", { style: { margin: 0, padding: "10px 20px", background: C.danger, color: "#fff", fontSize: 12.5 } }, "\u26A0\uFE0F Not connected yet \u2014 open index.html and paste your SUPABASE_URL and SUPABASE_ANON_KEY near the top. Your entries won't be saved until this is set.")),
         React.createElement("main", { style: { flex: "1 1 auto", overflowY: "auto", WebkitOverflowScrolling: "touch" } }, !loaded ? (React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "center", height: 200, color: C.inkSoft, fontFamily: FONT_MONO, fontSize: 13 } }, "Loading your kitchen\u2026")) : activeTab === "today" ? renderPlanner() : activeTab === "menu" ? renderMenu() : renderShopping()),
         React.createElement("nav", { style: { display: "flex", borderTop: `1px solid ${C.border}`, background: C.surface, padding: "8px 0" } },
