@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
+<title>Larder</title>
+
+<link rel="manifest" href="manifest.json" />
+<link rel="apple-touch-icon" href="icons/icon-180.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<meta name="apple-mobile-web-app-title" content="Larder" />
+<meta name="theme-color" content="#4B6350" />
+
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; background: #F6F2E9; }
+  #root { min-height: 100%; }
+</style>
+
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+</head>
+<body>
+<div id="root"></div>
+
+<script>
+"use strict";
+const { useState, useEffect } = React;
+function makeIcon(glyph) {
+    return function IconComp({ size = 16 }) {
+        return (React.createElement("span", { "aria-hidden": "true", style: { fontSize: size, lineHeight: 1, display: "inline-flex", alignItems: "center", justifyContent: "center" } }, glyph));
+    };
+}
+const CalendarDays = makeIcon("\uD83D\uDCC5");
+const ChevronLeft = makeIcon("\u2039");
+const ChevronRight = makeIcon("\u203A");
+const Plus = makeIcon("+");
+const X = makeIcon("\u00D7");
+const BookOpen = makeIcon("\uD83D\uDCD6");
+const ShoppingBasket = makeIcon("\uD83E\uDDFA");
+const Check = makeIcon("\u2713");
+const Trash2 = makeIcon("\uD83D\uDDD1");
+const Pencil = makeIcon("\u270E");
+const Search = makeIcon("\uD83D\uDD0D");
+const Sparkles = makeIcon("\u2728");
+const Utensils = makeIcon("\uD83C\uDF7D");
+const StickyNote = makeIcon("\uD83D\uDCDD");
+// ---------- design tokens ----------
+const C = {
+    paper: "#F6F2E9",
+    surface: "#FFFFFF",
+    border: "#E3DCCB",
+    ink: "#2B2A28",
+    inkSoft: "#6B6558",
+    primary: "#4B6350",
+    danger: "#8B3A42",
+    gold: "#C08A1E",
+};
+const FONT_SERIF = 'Georgia, "Times New Roman", serif';
+const FONT_SANS = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+const FONT_MONO = 'ui-monospace, Menlo, Consolas, "Courier New", monospace';
+const MEAL_TYPES = ["breakfast", "lunch", "dinner", "snack"];
+const MEAL_COLORS = {
+    breakfast: "#C08A1E",
+    lunch: "#4B6350",
+    dinner: "#8B3A42",
+    snack: "#5B7C99",
+};
+const TAB_TAGLINES = {
+    today: "Plan the week, log the day",
+    menu: "Your recipe collection",
+    shopping: "Pack the cart",
+};
+function uid() {
+    return `id_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+function todayStr() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+function addDays(dateStr, delta) {
+    const [y, m, d] = dateStr.split("-").map(Number);
+    const dt = new Date(y, m - 1, d);
+    dt.setDate(dt.getDate() + delta);
+    return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+}
+function formatDateDisplay(dateStr) {
+    const [y, m, d] = dateStr.split("-").map(Number);
+    const dt = new Date(y, m - 1, d);
+    return dt.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+}
+function getWeekDates(dateStr) {
+    const [y, m, d] = dateStr.split("-").map(Number);
+    const dt = new Date(y, m - 1, d);
+    const dow = dt.getDay();
+    const diffToMonday = dow === 0 ? -6 : 1 - dow;
+    const monday = new Date(dt);
+    monday.setDate(dt.getDate() + diffToMonday);
+    const dates = [];
+    for (let i = 0; i < 7; i++) {
+        const d2 = new Date(monday);
+        d2.setDate(monday.getDate() + i);
+        dates.push(`${d2.getFullYear()}-${String(d2.getMonth() + 1).padStart(2, "0")}-${String(d2.getDate()).padStart(2, "0")}`);
+    }
+    return dates;
+}
+function formatWeekRange(dates) {
+    const parse = (s) => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d); };
+    const opts = { month: "short", day: "numeric" };
+    return `${parse(dates[0]).toLocaleDateString("en-US", opts)} – ${parse(dates[6]).toLocaleDateString("en-US", opts)}`;
+}
+function formatDayShort(dateStr) {
+    const [y, m, d] = dateStr.split("-").map(Number);
+    const dt = new Date(y, m - 1, d);
+    return { weekday: dt.toLocaleDateString("en-US", { weekday: "short" }), day: dt.getDate(), isToday: dateStr === todayStr() };
+}
+function parseQtyStr(raw) {
+    if (!raw)
+        return null;
+    const s = raw.trim();
+    if (!s)
+        return null;
+    const match = s.match(/^(\d+\s+\d+\/\d+|\d+\/\d+|\d+(?:\.\d+)?)\s*(.*)$/);
+    if (!match)
+        return null;
+    const numToken = match[1];
+    const unit = (match[2] || "").trim().toLowerCase();
+    let num;
+    if (numToken.includes("/")) {
+        const spaceParts = numToken.split(" ");
+        if (spaceParts.length === 2) {
+            const whole = parseFloat(spaceParts[0]);
+            const [n, d] = spaceParts[1].split("/").map(Number);
+            num = whole + (d ? n / d : 0);
+        }
+        else {
+            const [n, d] = numToken.split("/").map(Number);
+            num = d ? n / d : NaN;
+        }
+    }
+    else {
+        num = parseFloat(numToken);
+    }
+    if (isNaN(num))
+        return null;
+    return { num, unit };
+}
+function formatNum(n) {
+    const rounded = Math.round(n * 100) / 100;
+    return String(rounded);
+}
+function aggregateIngredients(list) {
+    const groups = new Map();
+    list.forEach(({ name, qty }) => {
+        if (!name || !name.trim())
+            return;
+        const key = name.trim().toLowerCase();
+        if (!groups.has(key))
+            groups.set(key, { displayName: name.trim(), qtys: [] });
+        groups.get(key).qtys.push((qty || "").trim());
+    });
+    return Array.from(groups.values()).map(({ displayName, qtys }) => {
+        const nonEmpty = qtys.filter(Boolean);
+        if (nonEmpty.length === 0)
+            return { name: displayName, qty: "" };
+        const parsed = nonEmpty.map(parseQtyStr);
+        const allParsed = parsed.every((p) => p !== null);
+        const units = parsed.map((p) => (p ? p.unit : ""));
+        const sameUnit = allParsed && new Set(units).size <= 1;
+        if (sameUnit) {
+            const sum = parsed.reduce((acc, p) => acc + p.num, 0);
+            const unit = units[0] || "";
+            return { name: displayName, qty: `${formatNum(sum)}${unit ? " " + unit : ""}` };
+        }
+        return { name: displayName, qty: nonEmpty.join(" + ") };
+    });
+}
+function toStepRows(steps) {
+    const arr = Array.isArray(steps)
+        ? steps
+        : typeof steps === "string" && steps.trim()
+            ? steps.split("\n").map((s) => s.trim()).filter(Boolean)
+            : [];
+    return arr.length ? arr.map((text) => ({ id: uid(), text })) : [{ id: uid(), text: "" }];
+}
+function normalizeStepsForDisplay(steps) {
+    if (Array.isArray(steps))
+        return steps.filter(Boolean);
+    if (typeof steps === "string" && steps.trim())
+        return steps.split("\n").map((s) => s.trim()).filter(Boolean);
+    return [];
+}
+function renderStepsList(steps) {
+    const list = normalizeStepsForDisplay(steps);
+    if (list.length === 0)
+        return null;
+    return (React.createElement("ol", { style: { margin: "8px 0 0", paddingLeft: 18, fontSize: 13.5, color: C.inkSoft, lineHeight: 1.6 } }, list.map((s, i) => React.createElement("li", { key: i, style: { marginBottom: 3 } }, s))));
+}
+// ====== PASTE YOUR SUPABASE PROJECT DETAILS HERE ======
+const SUPABASE_URL = "https://mypejohitoivemqgefke.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_HqDA-EsI75lVtAcyhB4iKw_rIQAYKmy";
+// ========================================================
+const isConfigured = SUPABASE_URL.startsWith("http") && SUPABASE_ANON_KEY.length > 20;
+async function loadKey(key, fallback) {
+    if (!isConfigured)
+        return fallback;
+    try {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/larder_data?id=eq.${encodeURIComponent(key)}&select=value`, {
+            headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
+        });
+        if (!res.ok)
+            return fallback;
+        const rows = await res.json();
+        return rows.length ? rows[0].value : fallback;
+    }
+    catch (e) {
+        console.error("Load failed for", key, e);
+        return fallback;
+    }
+}
+async function saveKey(key, value) {
+    if (!isConfigured)
+        return;
+    try {
+        await fetch(`${SUPABASE_URL}/rest/v1/larder_data`, {
+            method: "POST",
+            headers: {
+                apikey: SUPABASE_ANON_KEY,
+                Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+                "Content-Type": "application/json",
+                Prefer: "resolution=merge-duplicates",
+            },
+            body: JSON.stringify({ id: key, value, updated_at: new Date().toISOString() }),
+        });
+    }
+    catch (e) {
+        console.error("Save failed for", key, e);
+    }
+}
+// ---------- reusable inline-style primitives ----------
+function Btn({ children, onClick, kind = "icon", disabled, style, ...rest }) {
+    const base = {
+        icon: { background: "none", border: "none", color: C.inkSoft, cursor: "pointer", padding: 6, display: "inline-flex", borderRadius: 8 },
+        primary: { background: disabled ? "#9aa89c" : C.primary, color: "#fff", border: "none", padding: "12px 20px", borderRadius: 12, fontWeight: 600, fontSize: 15, display: "inline-flex", alignItems: "center", gap: 6, justifyContent: "center", width: "100%", cursor: disabled ? "default" : "pointer" },
+        primarySmall: { background: disabled ? "#9aa89c" : C.primary, color: "#fff", border: "none", padding: "8px 16px", borderRadius: 12, fontWeight: 600, fontSize: 13, display: "inline-flex", alignItems: "center", gap: 6, cursor: disabled ? "default" : "pointer" },
+        secondary: { background: "transparent", border: `1.5px dashed ${C.border}`, color: C.inkSoft, padding: "8px 14px", borderRadius: 10, fontSize: 13, display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer" },
+        text: { background: "none", border: "none", color: C.primary, fontSize: 13, fontWeight: 500, cursor: "pointer", padding: "4px 8px" },
+        textDanger: { background: "none", border: "none", color: C.danger, fontSize: 13, fontWeight: 500, cursor: "pointer", padding: "4px 8px" },
+    };
+    return (React.createElement("button", { onClick: onClick, disabled: disabled, style: { ...base[kind], ...style }, ...rest }, children));
+}
+function handleBulletKeydown(e, setValue) {
+    const el = e.target;
+    const { selectionStart, selectionEnd, value } = el;
+    if (selectionStart !== selectionEnd)
+        return;
+    if (e.key === " ") {
+        const textBeforeCursor = value.slice(0, selectionStart);
+        const lineStart = textBeforeCursor.lastIndexOf("\n") + 1;
+        const currentLinePrefix = textBeforeCursor.slice(lineStart);
+        if (currentLinePrefix === "-") {
+            e.preventDefault();
+            const newValue = value.slice(0, lineStart) + "\u2022 " + value.slice(selectionStart);
+            setValue(newValue);
+            const pos = lineStart + 2;
+            requestAnimationFrame(() => { el.selectionStart = el.selectionEnd = pos; });
+        }
+        return;
+    }
+    if (e.key === "Enter") {
+        const textBeforeCursor = value.slice(0, selectionStart);
+        const lineStart = textBeforeCursor.lastIndexOf("\n") + 1;
+        const currentLine = textBeforeCursor.slice(lineStart);
+        if (currentLine.startsWith("\u2022 ")) {
+            e.preventDefault();
+            if (currentLine.trim() === "\u2022") {
+                const newValue = value.slice(0, lineStart) + value.slice(selectionStart);
+                setValue(newValue);
+                requestAnimationFrame(() => { el.selectionStart = el.selectionEnd = lineStart; });
+            }
+            else {
+                const insertion = "\n\u2022 ";
+                const newValue = value.slice(0, selectionStart) + insertion + value.slice(selectionStart);
+                setValue(newValue);
+                const pos = selectionStart + insertion.length;
+                requestAnimationFrame(() => { el.selectionStart = el.selectionEnd = pos; });
+            }
+        }
+    }
+}
+function IngredientEditor({ ingredients, onChange }) {
+    const update = (id, field, value) => onChange(ingredients.map((row) => (row.id === id ? { ...row, [field]: value } : row)));
+    const addRow = () => onChange([...ingredients, { id: uid(), name: "", qty: "" }]);
+    const removeRow = (id) => onChange(ingredients.filter((r) => r.id !== id));
+    const inputStyle = { border: `1.5px solid ${C.border}`, background: C.surface, borderRadius: 10, padding: "10px 12px", fontFamily: FONT_SANS, fontSize: 15, color: C.ink };
+    return (React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 8 } },
+        ingredients.map((row) => (React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "center" }, key: row.id },
+            React.createElement("input", { style: { ...inputStyle, flex: 2 }, placeholder: "Ingredient", value: row.name, onChange: (e) => update(row.id, "name", e.target.value) }),
+            React.createElement("input", { style: { ...inputStyle, flex: 1, fontFamily: FONT_MONO, fontSize: 13 }, placeholder: "Qty", value: row.qty, onChange: (e) => update(row.id, "qty", e.target.value) }),
+            React.createElement(Btn, { kind: "icon", onClick: () => removeRow(row.id), "aria-label": "Remove ingredient" },
+                React.createElement(X, { size: 16 }))))),
+        React.createElement(Btn, { kind: "secondary", onClick: addRow },
+            React.createElement(Plus, { size: 14 }),
+            " Add ingredient")));
+}
+function StepsEditor({ steps, onChange }) {
+    const update = (id, value) => onChange(steps.map((s) => (s.id === id ? { ...s, text: value } : s)));
+    const addRow = () => onChange([...steps, { id: uid(), text: "" }]);
+    const removeRow = (id) => onChange(steps.filter((s) => s.id !== id));
+    return (React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 8 } },
+        steps.map((s, idx) => (React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "flex-start" }, key: s.id },
+            React.createElement("span", { style: { width: 22, height: 22, borderRadius: "50%", background: C.paper, border: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, color: C.inkSoft, flexShrink: 0, marginTop: 6, fontFamily: FONT_MONO } }, idx + 1),
+            React.createElement("textarea", { style: { flex: 1, minHeight: 44, border: `1.5px solid ${C.border}`, background: C.surface, borderRadius: 10, padding: "10px 12px", fontFamily: FONT_SANS, fontSize: 14, color: C.ink, resize: "vertical" }, rows: 2, placeholder: `Step ${idx + 1}`, value: s.text, onChange: (e) => update(s.id, e.target.value), onKeyDown: (e) => handleBulletKeydown(e, (v) => update(s.id, v)) }),
+            React.createElement(Btn, { kind: "icon", onClick: () => removeRow(s.id), "aria-label": "Remove step" },
+                React.createElement(X, { size: 16 }))))),
+        React.createElement(Btn, { kind: "secondary", onClick: addRow },
+            React.createElement(Plus, { size: 14 }),
+            " Add step")));
+}
+function FieldLabel({ children }) {
+    return React.createElement("label", { style: { fontSize: 12, textTransform: "uppercase", letterSpacing: "0.06em", color: C.inkSoft, fontWeight: 600, marginTop: 4, display: "block" } }, children);
+}
+function TextInput(props) {
+    return React.createElement("input", { ...props, style: { width: "100%", boxSizing: "border-box", border: `1.5px solid ${C.border}`, background: C.surface, borderRadius: 10, padding: "10px 12px", fontFamily: FONT_SANS, fontSize: 15, color: C.ink, ...(props.style || {}) } });
+}
+function TextArea(props) {
+    return React.createElement("textarea", { ...props, style: { width: "100%", boxSizing: "border-box", minHeight: 60, border: `1.5px solid ${C.border}`, background: C.surface, borderRadius: 10, padding: "10px 12px", fontFamily: FONT_SANS, fontSize: 14, color: C.ink, resize: "vertical", ...(props.style || {}) } });
+}
+function MonoChip({ children }) {
+    return React.createElement("span", { style: { fontFamily: FONT_MONO, fontSize: 11.5, background: C.paper, borderRadius: 6, padding: "3px 7px", color: C.inkSoft, border: `1px solid ${C.border}`, display: "inline-block" } }, children);
+}
+function NoteBlock({ text }) {
+    if (!text)
+        return null;
+    return (React.createElement("div", { style: { display: "flex", alignItems: "flex-start", gap: 6, marginTop: 8, padding: "8px 10px", background: "rgba(192,138,30,0.1)", borderLeft: `2.5px solid ${C.gold}`, borderRadius: "0 8px 8px 0", fontSize: 12.5, color: C.inkSoft, fontStyle: "italic", lineHeight: 1.5 } },
+        React.createElement("span", { style: { color: C.gold, flexShrink: 0 } },
+            React.createElement(StickyNote, { size: 12 })),
+        React.createElement("span", null, text)));
+}
+function EmptyState({ icon, text }) {
+    return (React.createElement("div", { style: { display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", textAlign: "center", padding: "48px 24px", color: C.inkSoft, gap: 10 } },
+        icon,
+        React.createElement("p", { style: { fontSize: 14, maxWidth: 240, margin: 0 } }, text)));
+}
+function App() {
+    const [loaded, setLoaded] = useState(false);
+    const [activeTab, setActiveTab] = useState("today");
+    const [plannerMode, setPlannerMode] = useState("week");
+    const [selectedDate, setSelectedDate] = useState(todayStr());
+    const [dailyLogs, setDailyLogs] = useState({});
+    const [menuItems, setMenuItems] = useState([]);
+    const [shopping, setShopping] = useState({ items: [], selectedMenuIds: [] });
+    const [showMealForm, setShowMealForm] = useState(false);
+    const [mealDraft, setMealDraft] = useState(null);
+    const [showMenuForm, setShowMenuForm] = useState(false);
+    const [menuDraft, setMenuDraft] = useState(null);
+    const [menuSearch, setMenuSearch] = useState("");
+    const [shoppingMenuSearch, setShoppingMenuSearch] = useState("");
+    const [manualName, setManualName] = useState("");
+    const [manualQty, setManualQty] = useState("");
+    useEffect(() => {
+        (async () => {
+            const dl = await loadKey("larder-daily-logs", {});
+            const mi = await loadKey("larder-menu-items", []);
+            const sl = await loadKey("larder-shopping", { items: [], selectedMenuIds: [] });
+            setDailyLogs(dl);
+            setMenuItems(mi);
+            setShopping(sl);
+            setLoaded(true);
+        })();
+    }, []);
+    useEffect(() => { if (loaded)
+        saveKey("larder-daily-logs", dailyLogs); }, [dailyLogs, loaded]);
+    useEffect(() => { if (loaded)
+        saveKey("larder-menu-items", menuItems); }, [menuItems, loaded]);
+    useEffect(() => { if (loaded)
+        saveKey("larder-shopping", shopping); }, [shopping, loaded]);
+    function openNewMealForm(prefill, date) {
+        setMealDraft({
+            date: date || selectedDate,
+            mealType: (prefill && prefill.mealType) || "dinner",
+            name: (prefill && prefill.name) || "",
+            ingredients: prefill && prefill.ingredients && prefill.ingredients.length
+                ? prefill.ingredients.map((i) => ({ id: uid(), name: i.name, qty: i.qty }))
+                : [{ id: uid(), name: "", qty: "" }],
+            steps: toStepRows(prefill && prefill.steps),
+            notes: (prefill && prefill.notes) || "",
+            saveToMenu: false,
+            fromMenu: !!(prefill && prefill.fromMenu),
+        });
+        setShowMealForm(true);
+    }
+    function openLogFromMenu(menuItem, date) {
+        openNewMealForm({ mealType: "lunch", name: menuItem.name, ingredients: menuItem.ingredients, steps: menuItem.steps, notes: menuItem.notes, fromMenu: true }, date);
+    }
+    function openEditMeal(entry, mt, date) {
+        setMealDraft({
+            id: entry.id,
+            date,
+            mealType: mt,
+            name: entry.name,
+            ingredients: entry.ingredients.map((i) => ({ id: uid(), name: i.name, qty: i.qty })),
+            steps: toStepRows(entry.steps),
+            notes: entry.notes || "",
+            saveToMenu: false,
+            fromMenu: false,
+        });
+        setShowMealForm(true);
+    }
+    function fillDraftFromMenu(menuItem) {
+        setMealDraft((prev) => ({
+            ...prev,
+            name: menuItem.name,
+            ingredients: menuItem.ingredients.map((i) => ({ id: uid(), name: i.name, qty: i.qty })),
+            steps: toStepRows(menuItem.steps),
+            notes: menuItem.notes || "",
+            fromMenu: true,
+        }));
+    }
+    function saveMeal() {
+        if (!mealDraft.name.trim())
+            return;
+        const cleanedIngredients = mealDraft.ingredients
+            .filter((i) => i.name.trim())
+            .map((i) => ({ name: i.name.trim(), qty: i.qty.trim() }));
+        const cleanedSteps = mealDraft.steps.map((s) => s.text.trim()).filter(Boolean);
+        const entry = { id: mealDraft.id || uid(), mealType: mealDraft.mealType, name: mealDraft.name.trim(), ingredients: cleanedIngredients, steps: cleanedSteps, notes: mealDraft.notes.trim() };
+        const targetDate = mealDraft.date;
+        setDailyLogs((prev) => {
+            const dayList = prev[targetDate] ? [...prev[targetDate]] : [];
+            const idx = dayList.findIndex((e) => e.id === entry.id);
+            if (idx >= 0)
+                dayList[idx] = entry;
+            else
+                dayList.push(entry);
+            return { ...prev, [targetDate]: dayList };
+        });
+        if (mealDraft.saveToMenu) {
+            setMenuItems((prev) => [...prev, { id: uid(), name: entry.name, tags: [], ingredients: entry.ingredients, steps: entry.steps, notes: entry.notes }]);
+        }
+        setShowMealForm(false);
+        setMealDraft(null);
+    }
+    function deleteMeal(id, date) {
+        setDailyLogs((prev) => ({ ...prev, [date]: (prev[date] || []).filter((e) => e.id !== id) }));
+    }
+    function openNewMenuForm() {
+        setMenuDraft({ name: "", tags: "", ingredients: [{ id: uid(), name: "", qty: "" }], steps: [{ id: uid(), text: "" }], notes: "" });
+        setShowMenuForm(true);
+    }
+    function openEditMenuItem(mi) {
+        setMenuDraft({ id: mi.id, name: mi.name, tags: (mi.tags || []).join(", "), ingredients: mi.ingredients.map((i) => ({ id: uid(), name: i.name, qty: i.qty })), steps: toStepRows(mi.steps), notes: mi.notes || "" });
+        setShowMenuForm(true);
+    }
+    function saveMenuItem() {
+        if (!menuDraft.name.trim())
+            return;
+        const cleanedIngredients = menuDraft.ingredients.filter((i) => i.name.trim()).map((i) => ({ name: i.name.trim(), qty: i.qty.trim() }));
+        const cleanedSteps = menuDraft.steps.map((s) => s.text.trim()).filter(Boolean);
+        const tags = menuDraft.tags.split(",").map((t) => t.trim()).filter(Boolean);
+        const item = { id: menuDraft.id || uid(), name: menuDraft.name.trim(), tags, ingredients: cleanedIngredients, steps: cleanedSteps, notes: menuDraft.notes.trim() };
+        setMenuItems((prev) => {
+            const idx = prev.findIndex((m) => m.id === item.id);
+            if (idx >= 0) {
+                const copy = [...prev];
+                copy[idx] = item;
+                return copy;
+            }
+            return [...prev, item];
+        });
+        setShowMenuForm(false);
+        setMenuDraft(null);
+    }
+    function deleteMenuItem(id) {
+        setMenuItems((prev) => prev.filter((m) => m.id !== id));
+        setShopping((prev) => ({ ...prev, selectedMenuIds: prev.selectedMenuIds.filter((x) => x !== id) }));
+    }
+    function toggleSelectMenu(id) {
+        setShopping((prev) => {
+            const has = prev.selectedMenuIds.includes(id);
+            return { ...prev, selectedMenuIds: has ? prev.selectedMenuIds.filter((x) => x !== id) : [...prev.selectedMenuIds, id] };
+        });
+    }
+    function generateFromSelected() {
+        const chosen = menuItems.filter((m) => shopping.selectedMenuIds.includes(m.id));
+        const aggregated = aggregateIngredients(chosen.flatMap((m) => m.ingredients));
+        setShopping((prev) => {
+            const items = [...prev.items];
+            aggregated.forEach((agg) => {
+                const existingIdx = items.findIndex((it) => it.name.toLowerCase() === agg.name.toLowerCase());
+                if (existingIdx >= 0) {
+                    const merged = aggregateIngredients([{ name: items[existingIdx].name, qty: items[existingIdx].qty }, { name: agg.name, qty: agg.qty }]);
+                    items[existingIdx] = { ...items[existingIdx], qty: merged[0].qty };
+                }
+                else {
+                    items.push({ id: uid(), name: agg.name, qty: agg.qty, checked: false, source: "menu" });
+                }
+            });
+            return { ...prev, items, selectedMenuIds: [] };
+        });
+    }
+    function addManualItem(name, qty) {
+        setShopping((prev) => ({ ...prev, items: [...prev.items, { id: uid(), name: name.trim(), qty: (qty || "").trim(), checked: false, source: "manual" }] }));
+    }
+    function handleManualAdd() {
+        if (!manualName.trim())
+            return;
+        addManualItem(manualName, manualQty);
+        setManualName("");
+        setManualQty("");
+    }
+    function toggleChecked(id) {
+        setShopping((prev) => ({ ...prev, items: prev.items.map((it) => (it.id === id ? { ...it, checked: !it.checked } : it)) }));
+    }
+    function deleteItem(id) {
+        setShopping((prev) => ({ ...prev, items: prev.items.filter((it) => it.id !== id) }));
+    }
+    function clearChecked() {
+        setShopping((prev) => ({ ...prev, items: prev.items.filter((it) => !it.checked) }));
+    }
+    function clearAll() {
+        setShopping((prev) => ({ ...prev, items: [] }));
+    }
+    function renderWeekView() {
+        const weekDates = getWeekDates(selectedDate);
+        const isCurrentWeek = weekDates.includes(todayStr());
+        return (React.createElement("div", { style: { padding: 10, paddingBottom: 12 } },
+            React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 } },
+                React.createElement(Btn, { kind: "icon", onClick: () => setSelectedDate(addDays(selectedDate, -7)) },
+                    React.createElement(ChevronLeft, { size: 20 })),
+                React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, fontWeight: 600, fontSize: 13.5, fontFamily: FONT_MONO } },
+                    React.createElement(CalendarDays, { size: 16 }),
+                    React.createElement("span", null, formatWeekRange(weekDates)),
+                    !isCurrentWeek && React.createElement("button", { onClick: () => setSelectedDate(todayStr()), style: { background: C.primary, color: "#fff", border: "none", borderRadius: 10, padding: "3px 10px", fontSize: 11, cursor: "pointer" } }, "This week")),
+                React.createElement(Btn, { kind: "icon", onClick: () => setSelectedDate(addDays(selectedDate, 7)) },
+                    React.createElement(ChevronRight, { size: 20 }))),
+            weekDates.map((dateStr) => {
+                const entries = dailyLogs[dateStr] || [];
+                const hasDinner = entries.some((e) => e.mealType === "dinner");
+                const sortedEntries = MEAL_TYPES.flatMap((mt) => entries.filter((e) => e.mealType === mt));
+                const { weekday, day, isToday } = formatDayShort(dateStr);
+                return (React.createElement("div", { key: dateStr, style: { background: C.surface, border: `${isToday ? 1.5 : 1}px solid ${isToday ? C.primary : C.border}`, borderRadius: 12, marginBottom: 6, display: "flex", overflow: "hidden" } },
+                    React.createElement("div", { style: { width: 52, flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: isToday ? C.primary : C.paper, borderRight: `1px solid ${C.border}`, padding: "6px 4px", gap: 2 } },
+                        React.createElement("span", { style: { fontSize: 11, textTransform: "uppercase", letterSpacing: "0.04em", color: isToday ? "#fff" : C.inkSoft, fontWeight: 600 } }, weekday),
+                        React.createElement("span", { style: { fontFamily: FONT_SERIF, fontSize: 19, fontWeight: 600, color: isToday ? "#fff" : C.ink } }, day)),
+                    React.createElement("div", { style: { flex: 1, padding: "7px 10px", minWidth: 0 } },
+                        sortedEntries.length > 0 && (React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 7, marginBottom: 8 } }, sortedEntries.map((entry) => (React.createElement("div", { key: entry.id, style: { display: "flex", alignItems: "center", gap: 8 } },
+                            React.createElement("span", { style: { width: 8, height: 8, borderRadius: "50%", flexShrink: 0, background: MEAL_COLORS[entry.mealType] } }),
+                            React.createElement("span", { style: { fontFamily: FONT_SERIF, fontSize: 15, fontWeight: 600, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, entry.name),
+                            React.createElement("div", { style: { display: "flex", gap: 2, flexShrink: 0 } },
+                                React.createElement(Btn, { kind: "icon", onClick: () => openEditMeal(entry, entry.mealType, dateStr) },
+                                    React.createElement(Pencil, { size: 13 })),
+                                React.createElement(Btn, { kind: "icon", onClick: () => deleteMeal(entry.id, dateStr) },
+                                    React.createElement(Trash2, { size: 13 })))))))),
+                        !hasDinner && (React.createElement("button", { onClick: () => openNewMealForm({ mealType: "dinner" }, dateStr), style: { border: `1.5px dashed ${C.border}`, borderRadius: 10, padding: "7px 10px", color: C.inkSoft, fontSize: 13.5, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, justifyContent: "center", marginBottom: 8, width: "100%", background: "none" } },
+                            React.createElement(Plus, { size: 14 }),
+                            " Plan dinner")),
+                        React.createElement("button", { onClick: () => openNewMealForm({ mealType: "breakfast" }, dateStr), style: { display: "block", background: "none", border: "none", color: C.primary, fontSize: 12, fontWeight: 600, padding: 0, cursor: "pointer" } }, "+ add another meal"))));
+            })));
+    }
+    function renderDayView() {
+        const entries = dailyLogs[selectedDate] || [];
+        const isToday = selectedDate === todayStr();
+        return (React.createElement("div", { style: { padding: 16, paddingBottom: 110, position: "relative" } },
+            React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 } },
+                React.createElement(Btn, { kind: "icon", onClick: () => setSelectedDate(addDays(selectedDate, -1)) },
+                    React.createElement(ChevronLeft, { size: 20 })),
+                React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, fontWeight: 600, fontSize: 15 } },
+                    React.createElement(CalendarDays, { size: 16 }),
+                    React.createElement("span", null, formatDateDisplay(selectedDate)),
+                    !isToday && React.createElement("button", { onClick: () => setSelectedDate(todayStr()), style: { background: C.primary, color: "#fff", border: "none", borderRadius: 10, padding: "3px 10px", fontSize: 11, cursor: "pointer" } }, "Today")),
+                React.createElement(Btn, { kind: "icon", onClick: () => setSelectedDate(addDays(selectedDate, 1)) },
+                    React.createElement(ChevronRight, { size: 20 }))),
+            menuItems.length > 0 && (React.createElement("div", { style: { marginBottom: 20 } },
+                React.createElement("div", { style: { fontSize: 12, color: C.inkSoft, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8, fontWeight: 600 } }, "Quick log from Menu"),
+                React.createElement("div", { style: { display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 } }, menuItems.map((mi) => (React.createElement("button", { key: mi.id, onClick: () => openLogFromMenu(mi, selectedDate), style: { flex: "0 0 auto", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 20, padding: "8px 14px", fontSize: 13, whiteSpace: "nowrap", cursor: "pointer", color: C.ink } }, mi.name)))))),
+            entries.length === 0 ? (React.createElement(EmptyState, { icon: React.createElement(Utensils, { size: 28 }), text: "Nothing logged for this day yet. Tap + to add a meal." })) : (React.createElement("div", null, MEAL_TYPES.map((mt) => {
+                const forType = entries.filter((e) => e.mealType === mt);
+                if (forType.length === 0)
+                    return null;
+                return (React.createElement("div", { key: mt, style: { marginBottom: 20 } },
+                    React.createElement("div", { style: { fontSize: 12, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700, marginBottom: 8, color: MEAL_COLORS[mt] } }, mt),
+                    forType.map((entry) => (React.createElement("div", { key: entry.id, style: { position: "relative", display: "flex", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, marginBottom: 10, overflow: "hidden" } },
+                        React.createElement("div", { style: { width: 6, flexShrink: 0, background: MEAL_COLORS[mt] } }),
+                        React.createElement("div", { style: { padding: "12px 14px", flex: 1, minWidth: 0 } },
+                            React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 } },
+                                React.createElement("h4", { style: { fontFamily: FONT_SERIF, fontSize: 17, margin: 0, fontWeight: 600 } }, entry.name),
+                                React.createElement("div", { style: { display: "flex", gap: 2, flexShrink: 0 } },
+                                    React.createElement(Btn, { kind: "icon", onClick: () => openEditMeal(entry, mt, selectedDate) },
+                                        React.createElement(Pencil, { size: 14 })),
+                                    React.createElement(Btn, { kind: "icon", onClick: () => deleteMeal(entry.id, selectedDate) },
+                                        React.createElement(Trash2, { size: 14 })))),
+                            entry.ingredients.length > 0 && (React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 6, margin: "8px 0" } }, entry.ingredients.map((ing, i) => (React.createElement(MonoChip, { key: i },
+                                ing.name,
+                                ing.qty ? ` · ${ing.qty}` : ""))))),
+                            renderStepsList(entry.steps),
+                            React.createElement(NoteBlock, { text: entry.notes })))))));
+            }))),
+            React.createElement("button", { onClick: () => openNewMealForm({ mealType: "breakfast" }, selectedDate), "aria-label": "Log a meal", style: { position: "fixed", right: 20, bottom: 88, width: 52, height: 52, borderRadius: "50%", background: C.primary, color: "#fff", border: "none", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 14px rgba(43,42,40,0.25)", cursor: "pointer", zIndex: 10 } },
+                React.createElement(Plus, { size: 22 }))));
+    }
+    function renderPlanner() {
+        return (React.createElement(React.Fragment, null,
+            React.createElement("div", { style: { padding: "10px 10px 0" } },
+                React.createElement("div", { style: { display: "flex", gap: 6, marginBottom: 10, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: 3 } },
+                    React.createElement("button", { onClick: () => setPlannerMode("week"), style: { flex: 1, border: "none", background: plannerMode === "week" ? C.primary : "none", color: plannerMode === "week" ? "#fff" : C.inkSoft, padding: "7px 0", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" } }, "Week"),
+                    React.createElement("button", { onClick: () => setPlannerMode("day"), style: { flex: 1, border: "none", background: plannerMode === "day" ? C.primary : "none", color: plannerMode === "day" ? "#fff" : C.inkSoft, padding: "7px 0", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" } }, "Day"))),
+            plannerMode === "week" ? renderWeekView() : renderDayView()));
+    }
+    function renderMenu() {
+        const filtered = menuItems.filter((m) => m.name.toLowerCase().includes(menuSearch.toLowerCase()) || (m.tags || []).some((t) => t.toLowerCase().includes(menuSearch.toLowerCase())));
+        return (React.createElement("div", { style: { padding: 16, paddingBottom: 110, position: "relative" } },
+            React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: "8px 12px", marginBottom: 16, color: C.inkSoft } },
+                React.createElement(Search, { size: 16 }),
+                React.createElement("input", { style: { border: "none", background: "none", padding: "2px 0", outline: "none", flex: 1, fontFamily: FONT_SANS, fontSize: 15, color: C.ink }, placeholder: "Search your recipes", value: menuSearch, onChange: (e) => setMenuSearch(e.target.value) })),
+            menuItems.length === 0 ? (React.createElement(EmptyState, { icon: React.createElement(BookOpen, { size: 28 }), text: "Your recipe menu is empty. Save meals here as you log them, or add one directly." })) : (React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 12 } }, filtered.map((mi) => (React.createElement("div", { key: mi.id, style: { background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14 } },
+                React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start" } },
+                    React.createElement("h4", { style: { fontFamily: FONT_SERIF, fontSize: 17, margin: 0, fontWeight: 600 } }, mi.name),
+                    React.createElement("div", { style: { display: "flex", gap: 2, flexShrink: 0 } },
+                        React.createElement(Btn, { kind: "icon", onClick: () => openEditMenuItem(mi) },
+                            React.createElement(Pencil, { size: 14 })),
+                        React.createElement(Btn, { kind: "icon", onClick: () => deleteMenuItem(mi.id) },
+                            React.createElement(Trash2, { size: 14 })))),
+                mi.tags && mi.tags.length > 0 && (React.createElement("div", { style: { display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 } }, mi.tags.map((t, i) => React.createElement("span", { key: i, style: { fontSize: 11, background: "rgba(192,138,30,0.15)", color: C.gold, borderRadius: 10, padding: "3px 9px", fontWeight: 600 } }, t)))),
+                mi.ingredients.length > 0 && (React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 6, margin: "8px 0" } }, mi.ingredients.map((ing, i) => (React.createElement(MonoChip, { key: i },
+                    ing.name,
+                    ing.qty ? ` · ${ing.qty}` : ""))))),
+                renderStepsList(mi.steps),
+                React.createElement(NoteBlock, { text: mi.notes })))))),
+            React.createElement("button", { onClick: openNewMenuForm, "aria-label": "Add recipe", style: { position: "fixed", right: 20, bottom: 88, width: 52, height: 52, borderRadius: "50%", background: C.primary, color: "#fff", border: "none", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 14px rgba(43,42,40,0.25)", cursor: "pointer", zIndex: 10 } },
+                React.createElement(Plus, { size: 22 }))));
+    }
+    function renderShopping() {
+        return (React.createElement("div", { style: { padding: 10, paddingBottom: 12 } },
+            React.createElement("div", { style: { marginBottom: 24 } },
+                React.createElement("div", { style: { fontFamily: FONT_SERIF, fontSize: 16, fontWeight: 600, marginBottom: 10 } }, "Build from Menu"),
+                menuItems.length === 0 ? (React.createElement("p", { style: { fontSize: 13, color: C.inkSoft } }, "Add recipes to your Menu first, then pick which ones you're cooking this trip.")) : (React.createElement(React.Fragment, null,
+                    React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: "8px 12px", marginBottom: 10, color: C.inkSoft } },
+                        React.createElement(Search, { size: 16 }),
+                        React.createElement("input", { style: { border: "none", background: "none", padding: "2px 0", outline: "none", flex: 1, fontFamily: FONT_SANS, fontSize: 14, color: C.ink }, placeholder: "Search recipes to add", value: shoppingMenuSearch, onChange: (e) => setShoppingMenuSearch(e.target.value) })),
+                    React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 } }, menuItems
+                        .filter((mi) => mi.name.toLowerCase().includes(shoppingMenuSearch.toLowerCase()) ||
+                        (mi.tags || []).some((t) => t.toLowerCase().includes(shoppingMenuSearch.toLowerCase())))
+                        .map((mi) => {
+                        const picked = shopping.selectedMenuIds.includes(mi.id);
+                        return (React.createElement("button", { key: mi.id, onClick: () => toggleSelectMenu(mi.id), style: { border: `1.5px solid ${picked ? C.primary : C.border}`, background: picked ? C.primary : C.surface, color: picked ? "#fff" : C.ink, borderRadius: 20, padding: "7px 12px", fontSize: 13, display: "inline-flex", alignItems: "center", gap: 4, cursor: "pointer" } },
+                            picked && React.createElement(Check, { size: 14 }),
+                            " ",
+                            mi.name));
+                    })),
+                    React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" } },
+                        React.createElement(Btn, { kind: "primarySmall", disabled: shopping.selectedMenuIds.length === 0, onClick: generateFromSelected },
+                            React.createElement(Sparkles, { size: 14 }),
+                            " Add ingredients to list"),
+                        shopping.selectedMenuIds.length > 0 && (React.createElement("span", { style: { fontSize: 12, color: C.inkSoft, fontFamily: FONT_MONO } },
+                            shopping.selectedMenuIds.length,
+                            " selected")))))),
+            React.createElement("div", { style: { marginBottom: 24 } },
+                React.createElement("div", { style: { fontFamily: FONT_SERIF, fontSize: 16, fontWeight: 600, marginBottom: 10 } }, "Add item manually"),
+                React.createElement("div", { style: { display: "flex", gap: 8 } },
+                    React.createElement(TextInput, { placeholder: "Item", value: manualName, onChange: (e) => setManualName(e.target.value), onKeyDown: (e) => { if (e.key === "Enter")
+                            handleManualAdd(); } }),
+                    React.createElement(TextInput, { style: { maxWidth: 90, fontFamily: FONT_MONO }, placeholder: "Qty", value: manualQty, onChange: (e) => setManualQty(e.target.value), onKeyDown: (e) => { if (e.key === "Enter")
+                            handleManualAdd(); } }),
+                    React.createElement("button", { type: "button", onClick: handleManualAdd, "aria-label": "Add item", style: { background: C.primary, color: "#fff", borderRadius: 10, border: "none", padding: 8, display: "inline-flex", cursor: "pointer", flexShrink: 0 } },
+                        React.createElement(Plus, { size: 18 })))),
+            React.createElement("div", null,
+                React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 } },
+                    React.createElement("div", { style: { fontFamily: FONT_SERIF, fontSize: 16, fontWeight: 600 } },
+                        "Shopping list (",
+                        shopping.items.length,
+                        ")"),
+                    shopping.items.length > 0 && (React.createElement("div", { style: { display: "flex", gap: 4 } },
+                        React.createElement(Btn, { kind: "text", onClick: clearChecked }, "Clear checked"),
+                        React.createElement(Btn, { kind: "textDanger", onClick: clearAll }, "Clear all")))),
+                shopping.items.length === 0 ? (React.createElement(EmptyState, { icon: React.createElement(ShoppingBasket, { size: 28 }), text: "Your list is empty. Generate it from your menu or add items above." })) : (React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 6 } }, shopping.items.map((it) => (React.createElement("label", { key: it.id, style: { display: "flex", alignItems: "center", gap: 10, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 12px" } },
+                    React.createElement("input", { type: "checkbox", checked: it.checked, onChange: () => toggleChecked(it.id), style: { width: 18, height: 18, accentColor: C.primary, flexShrink: 0 } }),
+                    React.createElement("span", { style: { flex: 1, fontSize: 14.5, textDecoration: it.checked ? "line-through" : "none", color: it.checked ? C.inkSoft : C.ink } }, it.name),
+                    it.qty && React.createElement("span", { style: { fontFamily: FONT_MONO, fontSize: 12.5, color: C.inkSoft, background: C.paper, borderRadius: 6, padding: "2px 6px" } }, it.qty),
+                    React.createElement("button", { onClick: (e) => { e.preventDefault(); e.stopPropagation(); deleteItem(it.id); }, "aria-label": "Remove item", style: { background: "none", border: "none", color: C.inkSoft, cursor: "pointer", padding: 6, display: "inline-flex" } },
+                        React.createElement(X, { size: 14 }))))))))));
+    }
+    const modalOverlayStyle = { position: "fixed", inset: 0, background: "rgba(43,42,40,0.45)", display: "flex", alignItems: "flex-end", zIndex: 50 };
+    const modalSheetStyle = { background: C.surface, width: "100%", maxHeight: "88vh", overflowY: "auto", borderRadius: "20px 20px 0 0", padding: "8px 20px 24px", boxSizing: "border-box" };
+    return (React.createElement("div", { style: { fontFamily: FONT_SANS, background: C.paper, color: C.ink, height: "100dvh", minHeight: "100vh", display: "flex", flexDirection: "column", overflow: "hidden" } },
+        React.createElement("header", { style: { padding: "10px 16px 8px", borderBottom: `1px solid ${C.border}` } },
+            React.createElement("h1", { style: { fontFamily: FONT_SERIF, fontWeight: 700, fontSize: 22, margin: 0 } }, "Larder"),
+            React.createElement("p", { style: { margin: "1px 0 0", fontSize: 11, color: C.inkSoft, fontFamily: FONT_MONO } }, TAB_TAGLINES[activeTab])),
+        !isConfigured && (React.createElement("p", { style: { margin: 0, padding: "10px 20px", background: C.danger, color: "#fff", fontSize: 12.5 } }, "\u26A0\uFE0F Not connected yet \u2014 open index.html and paste your SUPABASE_URL and SUPABASE_ANON_KEY near the top. Your entries won't be saved until this is set.")),
+        React.createElement("main", { style: { flex: "1 1 auto", overflowY: "auto", WebkitOverflowScrolling: "touch" } }, !loaded ? (React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "center", height: 200, color: C.inkSoft, fontFamily: FONT_MONO, fontSize: 13 } }, "Loading your kitchen\u2026")) : activeTab === "today" ? renderPlanner() : activeTab === "menu" ? renderMenu() : renderShopping()),
+        React.createElement("nav", { style: { display: "flex", borderTop: `1px solid ${C.border}`, background: C.surface, padding: "4px 0 calc(4px + env(safe-area-inset-bottom))" } },
+            React.createElement("button", { onClick: () => setActiveTab("today"), style: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 2, background: "none", border: "none", color: activeTab === "today" ? C.primary : C.inkSoft, fontSize: 10, cursor: "pointer", padding: 3 } },
+                React.createElement(CalendarDays, { size: 18 }),
+                React.createElement("span", null, "Today")),
+            React.createElement("button", { onClick: () => setActiveTab("menu"), style: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 2, background: "none", border: "none", color: activeTab === "menu" ? C.primary : C.inkSoft, fontSize: 10, cursor: "pointer", padding: 3 } },
+                React.createElement(BookOpen, { size: 18 }),
+                React.createElement("span", null, "Menu")),
+            React.createElement("button", { onClick: () => setActiveTab("shopping"), style: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 2, background: "none", border: "none", color: activeTab === "shopping" ? C.primary : C.inkSoft, fontSize: 10, cursor: "pointer", padding: 3 } },
+                React.createElement(ShoppingBasket, { size: 18 }),
+                React.createElement("span", null, "Shopping"))),
+        showMealForm && mealDraft && (React.createElement("div", { style: modalOverlayStyle, onClick: () => setShowMealForm(false) },
+            React.createElement("div", { style: modalSheetStyle, onClick: (e) => e.stopPropagation() },
+                React.createElement("div", { style: { width: 36, height: 4, background: C.border, borderRadius: 2, margin: "8px auto 12px" } }),
+                React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 } },
+                    React.createElement("h3", { style: { fontFamily: FONT_SERIF, fontSize: 20, margin: 0 } }, mealDraft.id ? "Edit meal" : "Log a meal"),
+                    React.createElement(Btn, { kind: "icon", onClick: () => setShowMealForm(false) },
+                        React.createElement(X, { size: 20 }))),
+                React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 12 } },
+                    React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" } }, MEAL_TYPES.map((mt) => {
+                        const active = mealDraft.mealType === mt;
+                        return (React.createElement("button", { key: mt, onClick: () => setMealDraft({ ...mealDraft, mealType: mt }), style: { border: `1.5px solid ${active ? MEAL_COLORS[mt] : C.border}`, background: active ? MEAL_COLORS[mt] : C.surface, padding: "8px 14px", borderRadius: 20, fontSize: 13, textTransform: "capitalize", cursor: "pointer", color: active ? "#fff" : C.inkSoft } }, mt));
+                    })),
+                    !mealDraft.id && menuItems.length > 0 && (React.createElement("div", null,
+                        React.createElement(FieldLabel, null, "Fill from Menu"),
+                        React.createElement("div", { style: { display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 } }, menuItems.map((mi) => (React.createElement("button", { key: mi.id, type: "button", onClick: () => fillDraftFromMenu(mi), style: { flex: "0 0 auto", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 20, padding: "8px 14px", fontSize: 13, whiteSpace: "nowrap", cursor: "pointer", color: C.ink } }, mi.name)))))),
+                    React.createElement(TextInput, { placeholder: "What did you make?", value: mealDraft.name, onChange: (e) => setMealDraft({ ...mealDraft, name: e.target.value }) }),
+                    React.createElement(FieldLabel, null, "Ingredients"),
+                    React.createElement(IngredientEditor, { ingredients: mealDraft.ingredients, onChange: (ings) => setMealDraft({ ...mealDraft, ingredients: ings }) }),
+                    React.createElement(FieldLabel, null, "How to cook it"),
+                    React.createElement(StepsEditor, { steps: mealDraft.steps, onChange: (steps) => setMealDraft({ ...mealDraft, steps }) }),
+                    React.createElement(FieldLabel, null, "Notes"),
+                    React.createElement(TextArea, { placeholder: "Optional \u2014 substitutions, tips, what worked last time...", value: mealDraft.notes, onChange: (e) => setMealDraft({ ...mealDraft, notes: e.target.value }), onKeyDown: (e) => handleBulletKeydown(e, (v) => setMealDraft({ ...mealDraft, notes: v })) }),
+                    !mealDraft.fromMenu && (React.createElement("label", { style: { display: "flex", alignItems: "center", gap: 8, fontSize: 14, color: C.inkSoft } },
+                        React.createElement("input", { type: "checkbox", checked: mealDraft.saveToMenu, onChange: (e) => setMealDraft({ ...mealDraft, saveToMenu: e.target.checked }) }),
+                        "Also save to Menu for reuse"))),
+                React.createElement("div", { style: { marginTop: 16 } },
+                    React.createElement(Btn, { kind: "primary", onClick: saveMeal, disabled: !mealDraft.name.trim() }, "Save"))))),
+        showMenuForm && menuDraft && (React.createElement("div", { style: modalOverlayStyle, onClick: () => setShowMenuForm(false) },
+            React.createElement("div", { style: modalSheetStyle, onClick: (e) => e.stopPropagation() },
+                React.createElement("div", { style: { width: 36, height: 4, background: C.border, borderRadius: 2, margin: "8px auto 12px" } }),
+                React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 } },
+                    React.createElement("h3", { style: { fontFamily: FONT_SERIF, fontSize: 20, margin: 0 } }, menuDraft.id ? "Edit recipe" : "New recipe"),
+                    React.createElement(Btn, { kind: "icon", onClick: () => setShowMenuForm(false) },
+                        React.createElement(X, { size: 20 }))),
+                React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 12 } },
+                    React.createElement(TextInput, { placeholder: "Recipe name", value: menuDraft.name, onChange: (e) => setMenuDraft({ ...menuDraft, name: e.target.value }) }),
+                    React.createElement(TextInput, { placeholder: "Tags, comma separated (e.g. quick, vegetarian)", value: menuDraft.tags, onChange: (e) => setMenuDraft({ ...menuDraft, tags: e.target.value }) }),
+                    React.createElement(FieldLabel, null, "Ingredients"),
+                    React.createElement(IngredientEditor, { ingredients: menuDraft.ingredients, onChange: (ings) => setMenuDraft({ ...menuDraft, ingredients: ings }) }),
+                    React.createElement(FieldLabel, null, "How to cook it"),
+                    React.createElement(StepsEditor, { steps: menuDraft.steps, onChange: (steps) => setMenuDraft({ ...menuDraft, steps }) }),
+                    React.createElement(FieldLabel, null, "Notes"),
+                    React.createElement(TextArea, { placeholder: "Optional \u2014 substitutions, tips, what worked last time...", value: menuDraft.notes, onChange: (e) => setMenuDraft({ ...menuDraft, notes: e.target.value }), onKeyDown: (e) => handleBulletKeydown(e, (v) => setMenuDraft({ ...menuDraft, notes: v })) })),
+                React.createElement("div", { style: { marginTop: 16 } },
+                    React.createElement(Btn, { kind: "primary", onClick: saveMenuItem, disabled: !menuDraft.name.trim() }, "Save recipe")))))));
+}
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(React.createElement(App));
+
+</script>
+
+<script>
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("service-worker.js").catch(() => {});
+    });
+  }
+</script>
+</body>
+</html>
