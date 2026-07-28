@@ -196,10 +196,10 @@ function renderStepsList(steps) {
         return null;
     return (React.createElement("ol", { style: { margin: "8px 0 0", paddingLeft: 18, fontSize: 13.5, color: C.inkSoft, lineHeight: 1.6 } }, list.map((s, i) => React.createElement("li", { key: i, style: { marginBottom: 3 } }, s))));
 }
-// ====== PASTE YOUR SUPABASE PROJECT DETAILS HERE ======
-const SUPABASE_URL = "https://mypejohitoivemqgefke.supabase.co/";
+// ====== Supabase project details ======
+const SUPABASE_URL = "https://mypejohitoivemqgefke.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_HqDA-EsI75lVtAcyhB4iKw_rIQAYKmy";
-// ========================================================
+// ========================================
 const isConfigured = SUPABASE_URL.startsWith("http") && SUPABASE_ANON_KEY.length > 20;
 async function loadKey(key, fallback) {
     if (!isConfigured)
@@ -550,7 +550,7 @@ function App() {
                                 React.createElement("span", { style: { fontFamily: FONT_SERIF, fontSize: 14, fontWeight: 600, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, entry.name),
                                 React.createElement("div", { style: { display: "flex", gap: 0, flexShrink: 0 } },
                                     React.createElement(Btn, { kind: "icon", style: { padding: 3 }, onClick: () => openEditMeal(entry, entry.mealType, dateStr) },
-                                        React.createElement(Pencil, { size: 12 })),
+                                        React.createElement(Pencil, { size: 15 })),
                                     React.createElement(Btn, { kind: "icon", style: { padding: 3 }, onClick: () => deleteMeal(entry.id, dateStr) },
                                         React.createElement(Trash2, { size: 12 })))))))),
                             !hasDinner && (React.createElement("button", { onClick: () => openNewMealForm({ mealType: "dinner" }, dateStr), style: { border: `1.5px dashed ${C.border}`, borderRadius: 8, padding: "5px 10px", color: C.inkSoft, fontSize: 12.5, cursor: "pointer", display: "flex", alignItems: "center", gap: 5, justifyContent: "center", width: "100%", background: "none" } },
@@ -588,7 +588,7 @@ function App() {
                                 React.createElement("h4", { style: { fontFamily: FONT_SERIF, fontSize: 17, margin: 0, fontWeight: 600 } }, entry.name),
                                 React.createElement("div", { style: { display: "flex", gap: 2, flexShrink: 0 } },
                                     React.createElement(Btn, { kind: "icon", onClick: () => openEditMeal(entry, mt, selectedDate) },
-                                        React.createElement(Pencil, { size: 14 })),
+                                        React.createElement(Pencil, { size: 17 })),
                                     React.createElement(Btn, { kind: "icon", onClick: () => deleteMeal(entry.id, selectedDate) },
                                         React.createElement(Trash2, { size: 14 })))),
                             entry.ingredients.length > 0 && (React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 6, margin: "8px 0" } }, entry.ingredients.map((ing, i) => (React.createElement(MonoChip, { key: i },
@@ -619,7 +619,7 @@ function App() {
                     React.createElement("h4", { style: { fontFamily: FONT_SERIF, fontSize: 17, margin: 0, fontWeight: 600 } }, mi.name),
                     React.createElement("div", { style: { display: "flex", gap: 2, flexShrink: 0 } },
                         React.createElement(Btn, { kind: "icon", onClick: () => openEditMenuItem(mi) },
-                            React.createElement(Pencil, { size: 14 })),
+                            React.createElement(Pencil, { size: 17 })),
                         React.createElement(Btn, { kind: "icon", onClick: () => deleteMenuItem(mi.id) },
                             React.createElement(Trash2, { size: 14 })))),
                 mi.tags && mi.tags.length > 0 && (React.createElement("div", { style: { display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 } }, mi.tags.map((t, i) => React.createElement("span", { key: i, style: { fontSize: 11, background: "rgba(192,138,30,0.15)", color: C.gold, borderRadius: 10, padding: "3px 9px", fontWeight: 600 } }, t)))),
@@ -683,13 +683,13 @@ function App() {
     }
     const modalOverlayStyle = { position: "fixed", inset: 0, background: "rgba(43,42,40,0.45)", display: "flex", alignItems: "flex-end", zIndex: 50 };
     const modalSheetStyle = { background: C.surface, width: "100%", maxHeight: "88vh", overflowY: "auto", borderRadius: "20px 20px 0 0", padding: "8px 20px 24px", boxSizing: "border-box" };
-    return (React.createElement("div", { style: { fontFamily: FONT_SANS, background: C.paper, color: C.ink, minHeight: "100vh", display: "flex", flexDirection: "column" } },
-        React.createElement("header", { style: { padding: "12px 20px 10px", borderBottom: `1px solid ${C.border}` } },
+    return (React.createElement("div", { style: { fontFamily: FONT_SANS, background: C.paper, color: C.ink, height: "100dvh", maxHeight: "100dvh", display: "flex", flexDirection: "column", overflow: "hidden" } },
+        React.createElement("header", { style: { padding: "12px 20px 10px", borderBottom: `1px solid ${C.border}`, flexShrink: 0 } },
             React.createElement("h1", { style: { fontFamily: FONT_SERIF, fontWeight: 700, fontSize: 22, margin: 0 } }, "Larder"),
             React.createElement("p", { style: { margin: "2px 0 0", fontSize: 12, color: C.inkSoft, fontFamily: FONT_MONO } }, TAB_TAGLINES[activeTab])),
-        !isConfigured && (React.createElement("p", { style: { margin: 0, padding: "10px 20px", background: C.danger, color: "#fff", fontSize: 12.5 } }, "\u26A0\uFE0F Not connected yet \u2014 open index.html and paste your SUPABASE_URL and SUPABASE_ANON_KEY near the top. Your entries won't be saved until this is set.")),
-        React.createElement("main", { style: { flex: "1 1 auto", overflowY: "auto", WebkitOverflowScrolling: "touch" } }, !loaded ? (React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "center", height: 200, color: C.inkSoft, fontFamily: FONT_MONO, fontSize: 13 } }, "Loading your kitchen\u2026")) : activeTab === "today" ? renderPlanner() : activeTab === "menu" ? renderMenu() : renderShopping()),
-        React.createElement("nav", { style: { display: "flex", borderTop: `1px solid ${C.border}`, background: C.surface, padding: "8px 0" } },
+        !isConfigured && (React.createElement("p", { style: { margin: 0, padding: "10px 20px", background: C.danger, color: "#fff", fontSize: 12.5, flexShrink: 0 } }, "\u26A0\uFE0F Not connected yet \u2014 open index.html and paste your SUPABASE_URL and SUPABASE_ANON_KEY near the top. Your entries won't be saved until this is set.")),
+        React.createElement("main", { style: { flex: "1 1 auto", minHeight: 0, overflowY: "auto", WebkitOverflowScrolling: "touch" } }, !loaded ? (React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "center", height: 200, color: C.inkSoft, fontFamily: FONT_MONO, fontSize: 13 } }, "Loading your kitchen\u2026")) : activeTab === "today" ? renderPlanner() : activeTab === "menu" ? renderMenu() : renderShopping()),
+        React.createElement("nav", { style: { display: "flex", borderTop: `1px solid ${C.border}`, background: C.surface, padding: "8px 0", flexShrink: 0 } },
             React.createElement("button", { onClick: () => setActiveTab("today"), style: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 2, background: "none", border: "none", color: activeTab === "today" ? C.primary : C.inkSoft, fontSize: 11, cursor: "pointer", padding: 4 } },
                 React.createElement(CalendarDays, { size: 20 }),
                 React.createElement("span", null, "Today")),
