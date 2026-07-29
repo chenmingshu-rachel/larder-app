@@ -12,6 +12,8 @@
 <meta name="apple-mobile-web-app-title" content="Larder" />
 <meta name="theme-color" content="#4B6350" />
 
+<link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons" />
+
 <style>
   html, body { margin: 0; padding: 0; height: 100%; background: #F6F2E9; }
   #root { min-height: 100%; }
@@ -26,25 +28,25 @@
 <script>
 "use strict";
 const { useState, useEffect } = React;
-function makeIcon(glyph) {
+function makeIcon(iconName) {
     return function IconComp({ size = 16 }) {
-        return (React.createElement("span", { "aria-hidden": "true", style: { fontSize: size, lineHeight: 1, display: "inline-flex", alignItems: "center", justifyContent: "center" } }, glyph));
+        return (React.createElement("span", { className: "material-icons", "aria-hidden": "true", style: { fontSize: size, lineHeight: 1, display: "inline-flex", alignItems: "center", justifyContent: "center" } }, iconName));
     };
 }
-const CalendarDays = makeIcon("\uD83D\uDCC5");
-const ChevronLeft = makeIcon("\u2039");
-const ChevronRight = makeIcon("\u203A");
-const Plus = makeIcon("+");
-const X = makeIcon("\u00D7");
-const BookOpen = makeIcon("\uD83D\uDCD6");
-const ShoppingBasket = makeIcon("\uD83E\uDDFA");
-const Check = makeIcon("\u2713");
-const Trash2 = makeIcon("\uD83D\uDDD1");
-const Pencil = makeIcon("\u270E");
-const Search = makeIcon("\uD83D\uDD0D");
-const Sparkles = makeIcon("\u2728");
-const Utensils = makeIcon("\uD83C\uDF7D");
-const StickyNote = makeIcon("\uD83D\uDCDD");
+const CalendarDays = makeIcon("calendar_today");
+const ChevronLeft = makeIcon("chevron_left");
+const ChevronRight = makeIcon("chevron_right");
+const Plus = makeIcon("add");
+const X = makeIcon("close");
+const BookOpen = makeIcon("menu_book");
+const ShoppingBasket = makeIcon("shopping_basket");
+const Check = makeIcon("check");
+const Trash2 = makeIcon("delete");
+const Pencil = makeIcon("edit");
+const Search = makeIcon("search");
+const Sparkles = makeIcon("auto_awesome");
+const Utensils = makeIcon("restaurant");
+const StickyNote = makeIcon("sticky_note_2");
 // ---------- design tokens ----------
 const C = {
     paper: "#F6F2E9",
@@ -689,7 +691,7 @@ function App() {
             React.createElement("p", { style: { margin: "2px 0 0", fontSize: 12, color: C.inkSoft, fontFamily: FONT_MONO } }, TAB_TAGLINES[activeTab])),
         !isConfigured && (React.createElement("p", { style: { margin: 0, padding: "10px 20px", background: C.danger, color: "#fff", fontSize: 12.5, flexShrink: 0 } }, "\u26A0\uFE0F Not connected yet \u2014 open index.html and paste your SUPABASE_URL and SUPABASE_ANON_KEY near the top. Your entries won't be saved until this is set.")),
         React.createElement("main", { style: { flex: "1 1 auto", minHeight: 0, overflowY: "auto", WebkitOverflowScrolling: "touch" } }, !loaded ? (React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "center", height: 200, color: C.inkSoft, fontFamily: FONT_MONO, fontSize: 13 } }, "Loading your kitchen\u2026")) : activeTab === "today" ? renderPlanner() : activeTab === "menu" ? renderMenu() : renderShopping()),
-        React.createElement("nav", { style: { display: "flex", borderTop: `1px solid ${C.border}`, background: C.surface, padding: "8px 0", flexShrink: 0 } },
+        React.createElement("nav", { style: { display: "flex", borderTop: `1px solid ${C.border}`, background: C.surface, padding: "8px 0 calc(env(safe-area-inset-bottom, 0px) + 14px)", flexShrink: 0 } },
             React.createElement("button", { onClick: () => setActiveTab("today"), style: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 2, background: "none", border: "none", color: activeTab === "today" ? C.primary : C.inkSoft, fontSize: 11, cursor: "pointer", padding: 4 } },
                 React.createElement(CalendarDays, { size: 20 }),
                 React.createElement("span", null, "Today")),
